@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>研究報告檢索系統</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Noto Sans TC',sans-serif;background:#f5f4ef;color:#1a1a1a;font-size:14px;height:100vh;overflow:hidden}
+
+.top-bar{background:#fff;border-bottom:1px solid #e2e1db;padding:0 18px;display:flex;align-items:center;gap:10px;height:50px;flex-shrink:0}
+.logo{font-size:15px;font-weight:700;white-space:nowrap}.logo em{color:#2563eb;font-style:normal}
+.top-nav{display:flex;margin-left:14px}
+.top-nav a{padding:0 13px;height:50px;display:flex;align-items:center;font-size:13px;color:#666;text-decoration:none;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+.top-nav a.active{color:#1a1a1a;border-bottom-color:#2563eb;font-weight:600}
+.top-nav a:hover:not(.active){color:#1a1a1a;background:#fafaf7}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:6px}
+.ibtn{display:flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid #e2e1db;border-radius:6px;background:#fff;font-size:12px;cursor:pointer;color:#555;white-space:nowrap}
+.ibtn:hover{background:#f5f4ef}.ibtn.ok{border-color:#16a34a;color:#16a34a}
+
+.sync-badge{display:flex;align-items:center;gap:5px;font-size:11px;color:#888;padding:4px 10px;border:1px solid #e2e1db;border-radius:6px;background:#fafaf7}
+.sdot{width:7px;height:7px;border-radius:50%;background:#d1d5db;flex-shrink:0}
+.sdot.syncing{background:#f59e0b;animation:pulse .9s infinite}
+.sdot.done{background:#16a34a}.sdot.err{background:#ef4444}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+.layout{display:flex;height:calc(100vh - 50px)}
+.sidebar{width:238px;background:#fff;border-right:1px solid #e2e1db;display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+.sb-scroll{flex:1;overflow-y:auto;padding:13px}
+.sb-scroll h3{font-size:10px;font-weight:700;color:#bbb;text-transform:uppercase;letter-spacing:.08em;margin:14px 0 7px;padding-bottom:4px;border-bottom:1px solid #f0efe9}
+.sb-scroll h3:first-child{margin-top:0}
+.sb-scroll input,.sb-scroll select{width:100%;height:32px;padding:0 9px;border:1px solid #e2e1db;border-radius:5px;font-size:12px;background:#fff;color:#1a1a1a;margin-bottom:5px}
+.sb-scroll input:focus,.sb-scroll select:focus{outline:none;border-color:#2563eb}
+.qr{display:flex;gap:4px;margin-bottom:5px}.qr input{margin:0;flex:1;min-width:0}
+.cg{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:3px}
+.chip{padding:4px 5px;border:1px solid #e2e1db;border-radius:4px;font-size:11px;text-align:center;cursor:pointer;color:#555;background:#fff}
+.chip.sel{background:#1a1a1a;color:#fff;border-color:#1a1a1a}.chip:hover:not(.sel){background:#f5f4ef}
+.cl{font-size:11px;color:#bbb;cursor:pointer;margin-right:8px}.cl:hover{color:#333}
+.dsc{display:flex;gap:3px;margin-bottom:5px}.dsc .chip{flex:1;font-size:10px;padding:3px 2px}
+
+/* ── sync panel ── */
+.sync-panel{background:#fffbeb;border-top:1px solid #fde68a;padding:10px 13px;flex-shrink:0}
+.sync-panel h4{font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.sync-row{display:flex;align-items:baseline;justify-content:space-between;font-size:11px;color:#78350f;margin-bottom:4px;line-height:1.5}
+.sync-row strong{font-weight:600;color:#451a03}
+.sync-row.new-row{background:#fef3c7;border-radius:3px;padding:3px 5px;margin:4px 0}
+.btn-sync{width:100%;height:30px;border-radius:5px;font-size:12px;cursor:pointer;font-weight:600;background:#f59e0b;color:#fff;border:none;margin-top:6px}
+.btn-sync:hover{background:#d97706}.btn-sync:disabled{opacity:.45;cursor:default}
+.btn-resync{width:100%;height:26px;border-radius:5px;font-size:11px;cursor:pointer;background:transparent;color:#92400e;border:1px solid #fde68a;margin-top:4px}
+.btn-resync:hover{background:#fef3c7}
+
+.sync-log{max-height:60px;overflow-y:auto;font-size:10px;color:#92400e;margin-top:6px;line-height:1.6;background:#fffde7;border-radius:3px;padding:4px 6px;display:none}
+.sync-log.vis{display:block}
+
+.sb-foot{padding:10px 13px;border-top:1px solid #e2e1db}
+.btn-blk{width:100%;height:30px;border-radius:5px;font-size:12px;cursor:pointer;background:transparent;color:#888;border:1px solid #e2e1db}
+.btn-blk:hover{background:#f5f4ef}
+
+.content{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.search-row{padding:10px 15px;background:#fff;border-bottom:1px solid #e2e1db;display:flex;gap:7px;align-items:center}
+.sw{flex:1;position:relative}
+.sw input{width:100%;height:36px;padding:0 32px 0 12px;border:1px solid #e2e1db;border-radius:6px;font-size:13px;background:#fafaf7}
+.sw input:focus{outline:none;border-color:#2563eb;background:#fff}
+.kwx{position:absolute;right:9px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#bbb;font-size:16px;display:none;line-height:1}
+.kwx.vis{display:block}
+.vt{display:flex;border:1px solid #e2e1db;border-radius:6px;overflow:hidden}
+.vtb{padding:6px 8px;background:#fff;border:none;cursor:pointer;color:#aaa;display:flex;align-items:center}
+.vtb.active{background:#f0f0e8;color:#1a1a1a}
+.ssel{height:36px;padding:0 7px;border:1px solid #e2e1db;border-radius:6px;font-size:12px;background:#fff;color:#555}
+
+.stats-row{display:flex;background:#fafaf7;border-bottom:1px solid #e2e1db;flex-shrink:0}
+.stat{flex:1;text-align:center;padding:8px 0;border-right:1px solid #e2e1db}
+.stat:last-child{border-right:none}
+.stat .val{font-size:17px;font-weight:700;line-height:1.1}
+.stat .lbl{font-size:10px;color:#aaa;margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
+
+.tag-bar{display:flex;flex-wrap:wrap;gap:3px;padding:5px 14px;background:#fff;border-bottom:1px solid #e2e1db;min-height:0;align-items:center}
+.ftag{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;background:#eff6ff;color:#1d4ed8;border-radius:3px;font-size:11px;font-weight:500}
+.ftag button{background:none;border:none;cursor:pointer;color:#93c5fd;font-size:13px;line-height:1;padding:0}
+.ftag button:hover{color:#1d4ed8}
+
+/* 表格拖拉與縮放相關 CSS */
+.table-wrap{flex:1;overflow-x:auto;overflow-y:auto}
+table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:800px}
+thead th{position:sticky;top:0;z-index:2;background:#fff;padding:8px 9px;text-align:left;font-size:10px;font-weight:700;color:#bbb;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #e2e1db;white-space:nowrap;cursor:grab;user-select:none;transition:background 0.2s}
+thead th:active{cursor:grabbing}
+thead th:hover{color:#555}
+thead th.drag-over{border-left:3px solid #2563eb !important; background:#fafaf7}
+thead th.dragging{opacity:0.6; background:#eff6ff !important}
+
+/* 縮放拉桿 CSS */
+.resizer{position:absolute;top:0;right:0;width:5px;height:100%;cursor:col-resize;z-index:10;transition:background 0.2s}
+.resizer:hover, .resizer.resizing{background:#2563eb;opacity:0.4}
+
+col.cd{width:84px}col.cc{width:56px}col.cn{width:68px}col.ct{width:auto}col.cb{width:60px}col.cr{width:66px}col.ctp{width:72px}col.ccp{width:86px}col.cpg{width:38px}col.ca{width:48px}
+tbody tr{border-bottom:1px solid #f0efe9;cursor:pointer}
+tbody tr:hover{background:#fafaf7}tbody tr.arow{background:#eff6ff}
+tbody td{padding:7px 9px;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tbody td.mu{color:#999}
+.badge{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700}
+.b-buy{background:#dcfce7;color:#15803d}.b-sbuy{background:#bbf7d0;color:#14532d}
+.b-hold{background:#fef9c3;color:#a16207}.b-neu{background:#f1f0eb;color:#6b7280}
+.b-sell{background:#fee2e2;color:#b91c1c}.b-morning{background:#e0e7ff;color:#3730a3}
+.ra{display:flex;gap:2px;align-items:center}
+.ab{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:3px;background:transparent;border:none;cursor:pointer;color:#ddd;font-size:12px}
+.ab:hover{background:#f0efe9;color:#555}.ab.bmd{color:#f59e0b}
+
+.cp-up{color:#dc2626;font-weight:600}.cp-dn{color:#16a34a;font-weight:600}.cp-flat{color:#6b7280}
+.cp-pct{font-size:10px;margin-left:2px}
+
+.card-grid{display:none;padding:11px;grid-template-columns:repeat(auto-fill,minmax(265px,1fr));gap:7px}
+.card{background:#fff;border:1px solid #e2e1db;border-radius:8px;padding:12px;cursor:pointer}
+.card:hover{border-color:#93c5fd}.card.arow{border-color:#2563eb;background:#f0f6ff}
+mark{background:#fef08a;border-radius:2px;padding:0 1px}
+
+.bot-bar{padding:7px 14px;background:#fff;border-top:1px solid #e2e1db;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.pgi{font-size:12px;color:#aaa}
+.pbs{display:flex;gap:3px;align-items:center}
+.pb{min-width:26px;height:26px;padding:0 5px;border:1px solid #e2e1db;border-radius:4px;background:#fff;font-size:11px;cursor:pointer;color:#555}
+.pb.active{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+.pb:hover:not(.active):not(:disabled){background:#f5f4ef}.pb:disabled{opacity:.35;cursor:default}
+.pgz{height:26px;padding:0 5px;border:1px solid #e2e1db;border-radius:4px;font-size:11px;background:#fff;color:#555}
+
+.preview{width:0;background:#fff;border-left:1px solid #e2e1db;display:flex;flex-direction:column;overflow:hidden;transition:width .18s ease;flex-shrink:0}
+.preview.open{width:300px}
+.pvh{padding:11px 13px;border-bottom:1px solid #e2e1db;display:flex;align-items:flex-start;justify-content:space-between;gap:7px}
+.pvcl{background:none;border:none;cursor:pointer;color:#bbb;font-size:18px;line-height:1;flex-shrink:0}
+.pvcl:hover{color:#333}
+.pvb{flex:1;overflow-y:auto;padding:13px}
+.pvm{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px}
+.pm{background:#fafaf7;border-radius:5px;padding:8px}
+.pm .k{font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+.pm .v{font-size:13px;font-weight:600}
+.pvs{margin-bottom:11px}
+.pvs h4{font-size:10px;font-weight:700;color:#bbb;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.price-row{display:flex;gap:12px;margin-top:8px;flex-wrap:wrap}
+.price-item .k{font-size:10px;color:#bbb;margin-bottom:1px}
+.price-item .v{font-size:16px;font-weight:700}
+.pv-open{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;height:34px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;margin-top:5px}
+.pv-open:hover{background:#1d4ed8}
+.pvbm{display:flex;align-items:center;justify-content:center;gap:5px;width:100%;height:30px;background:transparent;color:#555;border:1px solid #e2e1db;border-radius:6px;font-size:12px;cursor:pointer;margin-top:4px}
+.pvbm:hover{background:#fafaf7}
+.sim-item{padding:7px;border-radius:4px;border:1px solid #e2e1db;margin-bottom:4px;cursor:pointer;font-size:12px}
+.sim-item:hover{background:#fafaf7;border-color:#93c5fd}
+.sim-d{font-size:10px;color:#aaa;margin-bottom:2px}
+.sim-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.bmp{position:fixed;top:50px;right:0;width:285px;height:calc(100vh - 50px);background:#fff;border-left:1px solid #e2e1db;z-index:100;transform:translateX(100%);transition:transform .18s;display:flex;flex-direction:column}
+.bmp.open{transform:translateX(0)}
+.bmh{padding:12px 15px;border-bottom:1px solid #e2e1db;display:flex;align-items:center;justify-content:space-between}
+.bmh h2{font-size:14px;font-weight:600}
+.bml{flex:1;overflow-y:auto;padding:9px}
+.bmi{padding:9px;border:1px solid #e2e1db;border-radius:5px;margin-bottom:5px;cursor:pointer;position:relative}
+.bmi:hover{background:#fafaf7}
+.bmi-c{font-size:11px;font-weight:700;color:#2563eb}
+.bmi-n{font-size:12px;font-weight:500;margin-bottom:1px}
+.bmi-t{font-size:11px;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bmi-d{font-size:10px;color:#bbb;margin-top:2px}
+.bmrm{position:absolute;top:7px;right:7px;background:none;border:none;cursor:pointer;color:#ddd;font-size:14px}
+.bmrm:hover{color:#ef4444}
+.bme{text-align:center;padding:40px 0;color:#bbb;font-size:13px}
+
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;display:none;align-items:center;justify-content:center}
+.mo.open{display:flex}
+.md{background:#fff;border-radius:12px;width:640px;max-width:90vw;max-height:85vh;overflow:hidden;display:flex;flex-direction:column}
+.mdh{padding:13px 17px;border-bottom:1px solid #e2e1db;display:flex;align-items:center;justify-content:space-between}
+.mdh h2{font-size:14px;font-weight:600}
+.mdb{flex:1;overflow-y:auto;padding:17px}
+.mdc{background:none;border:none;cursor:pointer;color:#aaa;font-size:20px}.mdc:hover{color:#333}
+.ctabs{display:flex;margin-bottom:16px;border-bottom:1px solid #e2e1db}
+.ctab{padding:7px 14px;font-size:12px;color:#888;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ctab.active{color:#1a1a1a;font-weight:600;border-bottom-color:#2563eb}
+.bar-chart{display:flex;flex-direction:column;gap:5px}
+.br{display:flex;align-items:center;gap:7px}
+.bl{width:72px;text-align:right;color:#555;flex-shrink:0;font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt{flex:1;height:20px;background:#f0efe9;border-radius:3px;overflow:hidden}
+.bf{height:100%;border-radius:3px;display:flex;align-items:center;padding-left:6px;font-size:11px;font-weight:600;color:#fff;min-width:22px;transition:width .4s ease}
+.bc2{font-size:11px;color:#aaa;width:26px;flex-shrink:0}
+
+.dd{position:relative}
+.ddm{position:absolute;top:calc(100% + 5px);right:0;background:#fff;border:1px solid #e2e1db;border-radius:7px;box-shadow:0 4px 14px rgba(0,0,0,.09);min-width:142px;z-index:200;display:none}
+.ddm.open{display:block}
+.ddi{padding:8px 13px;font-size:12px;color:#333;cursor:pointer;display:flex;align-items:center;gap:6px}
+.ddi:hover{background:#f5f4ef}
+.ddi:first-child{border-radius:7px 7px 0 0}.ddi:last-child{border-radius:0 0 7px 7px}
+
+.lovo{display:none;position:fixed;inset:0;background:rgba(255,255,255,.9);z-index:999;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+.lovo.show{display:flex}
+.spinner{width:26px;height:26px;border:2px solid #e2e1db;border-top-color:#2563eb;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.lmsg{font-size:13px;color:#555}
+.lsub{font-size:11px;color:#aaa;margin-top:-6px}
+.prb{position:fixed;top:50px;left:0;right:0;height:2px;z-index:500}
+.prf{height:100%;width:0;background:#2563eb;transition:width .3s;border-radius:0 2px 2px 0}
+.nores{text-align:center;padding:60px 0;color:#bbb}
+.nores .ico{font-size:34px;margin-bottom:10px}
+.nores p{font-size:14px}.nores small{font-size:12px;display:block;margin-top:5px;color:#ddd}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);background:#1a1a1a;color:#fff;padding:8px 17px;border-radius:7px;font-size:12px;opacity:0;transition:all .25s;z-index:9999;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#ddd;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#bbb}
+</style>
+</head>
+<body>
+<div class="lovo" id="lovo">
+  <div class="spinner"></div>
+  <div class="lmsg" id="lmsg">載入中...</div>
+  <div class="lsub" id="lsub"></div>
+</div>
+<div class="prb"><div class="prf" id="prf"></div></div>
+<div class="toast" id="toast"></div>
+
+<div class="top-bar">
+  <div class="logo">研究<em>報告</em>檢索</div>
+  <nav class="top-nav">
+    <a class="active" onclick="switchTab(this,'all')">全部</a>
+    <a onclick="switchTab(this,'individual')">個股報告</a>
+    <a onclick="switchTab(this,'morning')">晨會報告</a>
+    <a onclick="switchTab(this,'industry')">產業報告</a>
+  </nav>
+  <div class="top-right">
+    <div class="sync-badge" id="sync-badge">
+      <div class="sdot" id="sdot"></div>
+      <span id="slabel">尚未連線</span>
+    </div>
+    <button class="ibtn" onclick="fetchAllClose()" title="從台灣證交所更新昨收價">
+      <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 7a6 6 0 1010.7-3.7M1 7V3m0 4H5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      更新收盤價
+    </button>
+    <button class="ibtn" onclick="openChartModal()">
+      <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="7" width="2.5" height="6" rx=".5" fill="currentColor"/><rect x="5.5" y="4" width="2.5" height="9" rx=".5" fill="currentColor"/><rect x="10" y="1" width="2.5" height="12" rx=".5" fill="currentColor"/></svg>
+      統計
+    </button>
+    <div class="dd">
+      <button class="ibtn" onclick="document.getElementById('ddm').classList.toggle('open')">
+        <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M4.5 6.5L7 9l2.5-2.5M2 11v1.5a.5.5 0 00.5.5h9a.5.5 0 00.5-.5V11" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>匯出
+      </button>
+      <div class="ddm" id="ddm">
+        <div class="ddi" onclick="exportCSV()">📄 匯出 CSV</div>
+        <div class="ddi" onclick="exportJSON()">📦 匯出 JSON</div>
+        <div class="ddi" onclick="window.print()">🖨️ 列印</div>
+      </div>
+    </div>
+    <button class="ibtn" onclick="toggleBmPanel()">
+      <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2 1h10a.5.5 0 01.5.5V13l-5.5-3L1.5 13V1.5A.5.5 0 012 1z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+      收藏 <span id="bm-count" style="font-size:10px;background:#2563eb;color:#fff;border-radius:10px;padding:0 5px;min-width:15px;text-align:center">0</span>
+    </button>
+    
+    <button class="ibtn" id="logout-btn" onclick="disconnectDrive()" style="display:none; color:#b91c1c; border-color:#fca5a5;">
+      登出清空
+    </button>
+    <button class="ibtn" id="auth-btn" onclick="connectDrive()">
+      <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M7 1.5A5.5 5.5 0 1112.5 7M9.5 7h3m0 0v-3m0 3l-2-2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span id="auth-label">連線 Drive</span>
+    </button>
+  </div>
+</div>
+
+<div class="layout">
+<div class="sidebar">
+  <div class="sb-scroll">
+    <h3>日期範圍（西元）</h3>
+    <input type="date" id="date-from" onchange="applyFilters()">
+    <input type="date" id="date-to" onchange="applyFilters()">
+    <div class="dsc">
+      <div class="chip" onclick="setDR(7)">近7天</div>
+      <div class="chip" onclick="setDR(30)">近30天</div>
+      <div class="chip" onclick="setDR(90)">近一季</div>
+    </div>
+
+    <h3>股票代號 / 名稱</h3>
+    <input type="text" id="code-input" placeholder="2330, 台積電..." oninput="applyFilters()">
+
+    <h3>券商 <span><a class="cl" onclick="selAllB()">全選</a><a class="cl" onclick="clrB()">清除</a></span></h3>
+    <div class="cg" id="broker-grid"></div>
+
+    <h3>投資建議</h3>
+    <div class="cg" id="rec-grid"></div>
+
+    <h3>目標價（元）</h3>
+    <div class="qr">
+      <input type="number" id="tp-min" placeholder="最低" oninput="applyFilters()">
+      <input type="number" id="tp-max" placeholder="最高" oninput="applyFilters()">
+    </div>
+  </div>
+
+  <div class="sync-panel">
+    <h4>📁 Google Drive 同步</h4>
+    <div class="sync-row">上次同步<strong id="sp-time">從未</strong></div>
+    <div class="sync-row">已知資料夾<strong id="sp-folders">0 個</strong></div>
+    <div class="sync-row">報告總數<strong id="sp-total">0 份</strong></div>
+    <div class="sync-row new-row" id="sp-new-row" style="display:none">
+      🆕 發現新資料夾 <strong id="sp-new">0 個</strong>
+    </div>
+    <button class="btn-sync" id="btn-sync" onclick="runSync()" disabled>🔄 同步新資料夾</button>
+    <button class="btn-resync" id="btn-resync" onclick="reFullScan()" disabled>🔄 全量重新同步</button>
+    <div class="sync-log" id="sync-log"></div>
+  </div>
+
+  <div class="sb-foot"><button class="btn-blk" onclick="clearAll()">清除所有篩選</button></div>
+</div>
+
+<div class="content">
+  <div class="search-row">
+    <div class="sw">
+      <input type="text" id="kw-input" placeholder="搜尋標題、券商、股名... （按 / 聚焦）" oninput="onKwInput(this)">
+      <button class="kwx" id="kwx" onclick="clearKw()">×</button>
+    </div>
+    <div class="vt">
+      <button class="vtb active" id="vt-tbl" onclick="setView('table')" title="表格">
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="1.5" width="12" height="3" rx=".8" fill="currentColor" opacity=".3"/><rect x="1" y="5.5" width="12" height="3" rx=".8" fill="currentColor" opacity=".6"/><rect x="1" y="9.5" width="12" height="3" rx=".8" fill="currentColor"/></svg>
+      </button>
+      <button class="vtb" id="vt-card" onclick="setView('card')" title="卡片">
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" fill="currentColor" opacity=".5"/><rect x="8" y="1" width="5" height="5" rx="1" fill="currentColor" opacity=".5"/><rect x="1" y="8" width="5" height="5" rx="1" fill="currentColor"/><rect x="8" y="8" width="5" height="5" rx="1" fill="currentColor"/></svg>
+      </button>
+    </div>
+    <select class="ssel" onchange="onSortSel(this)">
+      <option value="date-1">最新在前</option>
+      <option value="date1">最舊在前</option>
+      <option value="code1">代號 A→Z</option>
+      <option value="tp-1">目標價高→低</option>
+      <option value="broker1">券商 A→Z</option>
+    </select>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat"><div class="val" id="st-total">—</div><div class="lbl">搜尋結果</div></div>
+    <div class="stat"><div class="val" id="st-today">—</div><div class="lbl">今日報告</div></div>
+    <div class="stat"><div class="val" id="st-brokers">—</div><div class="lbl">涵蓋券商</div></div>
+    <div class="stat"><div class="val" id="st-buy">—</div><div class="lbl">買進評等</div></div>
+    <div class="stat"><div class="val" id="st-all">—</div><div class="lbl">Drive 總數</div></div>
+  </div>
+  <div class="tag-bar" id="tag-bar"></div>
+
+  <div class="table-wrap" id="table-wrap">
+    <table id="main-table">
+      <colgroup>
+        <col class="cd" data-idx="0"><col class="cc" data-idx="1"><col class="cn" data-idx="2">
+        <col class="ct" data-idx="3"><col class="cb" data-idx="4"><col class="cr" data-idx="5">
+        <col class="ctp" data-idx="6"><col class="ccp" data-idx="7"><col class="cpg" data-idx="8">
+        <col class="ca" data-idx="9">
+      </colgroup>
+      <thead><tr>
+        <th data-idx="0" onclick="srtBy('date')">日期（民國）</th>
+        <th data-idx="1" onclick="srtBy('code')">代號</th>
+        <th data-idx="2" onclick="srtBy('name')">名稱</th>
+        <th data-idx="3" onclick="srtBy('title')">檔案 / 標題</th>
+        <th data-idx="4" onclick="srtBy('broker')">券商</th>
+        <th data-idx="5">建議</th>
+        <th data-idx="6" onclick="srtBy('tp')" style="text-align:right">目標價</th>
+        <th data-idx="7" onclick="srtBy('close')" style="text-align:right">昨收 <span id="close-ts" style="font-size:9px;color:#bbb;font-weight:400"></span></th>
+        <th data-idx="8" style="text-align:center">頁</th>
+        <th data-idx="9"></th>
+      </tr></thead>
+      <tbody id="result-body"></tbody>
+    </table>
+    <div class="card-grid" id="card-grid"></div>
+    <div id="nores" class="nores" style="display:none">
+      <div class="ico">🔍</div><p>找不到符合的報告</p><small>試試修改關鍵字或放寬篩選條件</small>
+    </div>
+  </div>
+
+  <div class="bot-bar">
+    <div class="pgi" id="pgi">—</div>
+    <div style="display:flex;align-items:center;gap:7px">
+      <select class="pgz" onchange="S.pageSize=+this.value;S.page=1;renderTable()">
+        <option value="15">15筆/頁</option><option value="30">30筆/頁</option>
+        <option value="50">50筆/頁</option><option value="100">100筆/頁</option>
+      </select>
+      <div class="pbs" id="pbs"></div>
+    </div>
+  </div>
+</div>
+
+<div class="preview" id="preview">
+  <div class="pvh">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:10px;color:#bbb;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">報告預覽</div>
+      <div style="font-size:12px;font-weight:600;line-height:1.4;color:#1a1a1a" id="pv-title">—</div>
+    </div>
+    <button class="pvcl" onclick="closePv()">×</button>
+  </div>
+  <div class="pvb">
+    <div class="pvm">
+      <div class="pm"><div class="k">日期（民國）</div><div class="v" id="pv-roc">—</div></div>
+      <div class="pm"><div class="k">代號</div><div class="v" style="color:#2563eb" id="pv-code">—</div></div>
+      <div class="pm"><div class="k">券商</div><div class="v" id="pv-broker">—</div></div>
+      <div class="pm"><div class="k">資料夾</div><div class="v" style="font-size:11px;color:#888" id="pv-folder">—</div></div>
+    </div>
+    <div class="pvs">
+      <h4>投資建議 &amp; 價格</h4>
+      <div id="pv-rec"></div>
+      <div class="price-row">
+        <div class="price-item"><div class="k">目標價</div><div class="v" id="pv-tp">—</div></div>
+        <div class="price-item"><div class="k">昨收（TWSE）</div><div class="v" id="pv-close">—</div></div>
+        <div class="price-item"><div class="k">潛在漲幅</div><div class="v" id="pv-upside">—</div></div>
+      </div>
+    </div>
+    <div class="pvs">
+      <h4>同資料夾其他報告</h4>
+      <div id="pv-folder-files"></div>
+    </div>
+    <div class="pvs">
+      <h4>同股其他報告</h4>
+      <div id="pv-sim"></div>
+    </div>
+    <button class="pv-open" onclick="openCurr()">
+      <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M7.5 3.5L11 7l-3.5 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      開啟 PDF
+    </button>
+    <button class="pvbm" id="pvbm" onclick="toggleBmCurr()">☆ 加入收藏</button>
+  </div>
+</div>
+</div>
+
+<div class="bmp" id="bmp">
+  <div class="bmh"><h2>⭐ 收藏報告</h2><button class="pvcl" onclick="toggleBmPanel()">×</button></div>
+  <div class="bml" id="bml"></div>
+</div>
+
+<div class="mo" id="mo" onclick="if(event.target===this)closeChart()">
+  <div class="md">
+    <div class="mdh"><h2>📊 統計圖表</h2><button class="mdc" onclick="closeChart()">×</button></div>
+    <div class="mdb">
+      <div class="ctabs">
+        <div class="ctab active" onclick="switchCtab(this,'broker')">券商分布</div>
+        <div class="ctab" onclick="switchCtab(this,'rec')">建議分布</div>
+        <div class="ctab" onclick="switchCtab(this,'date')">月度趨勢</div>
+        <div class="ctab" onclick="switchCtab(this,'stock')">熱門個股</div>
+      </div>
+      <div id="chart-content"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// 常數設定
+// ═══════════════════════════════════════════════════════
+const CLIENT_ID = '68333943848-94s4ttlaiguh2v6iq87hl6jr5eg8btj7.apps.googleusercontent.com';
+const ROOT_FOLDER_ID = '1pfDxTsqbYRgjKJ0neGmanjKQsQ-FaN7J';
+const BROKERS = ['元大','國泰','永豐','富邦','凱基','群益','台新','中信','統一','第一金',
+  '兆豐','華南','玉山','日盛','新光','安信','宏遠','福邦','致和','永全',
+  'Daiwa','CLSA','MS','UBS','JPMorgan','Citi','HSBC','BofA','Nomura','Macquarie'];
+
+const MORNING_KW = ['晨會','morning','早報','早安','盤前'];
+const RECS = ['買進','強力買進','加碼','持有','中立','減碼','賣出'];
+const RC = {'買進':'#15803d','強力買進':'#14532d','加碼':'#166534','持有':'#a16207','中立':'#6b7280','減碼':'#9a3412','賣出':'#b91c1c'};
+const RB = {'買進':'#dcfce7','強力買進':'#bbf7d0','加碼':'#bbf7d0','持有':'#fef9c3','中立':'#f1f0eb','減碼':'#ffedd5','賣出':'#fee2e2'};
+const COLORS = ['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#ea580c','#9333ea'];
+
+const DEMO = [
+  {rocDate:'115.1.16',date:'2026-04-06',code:'2330',name:'台積電',title:'元大_2330_台積電_買進_1200.pdf',broker:'元大',rec:'買進',tp:1200,close:null,pages:18,type:'individual',id:'d01',driveUrl:'',folder:'115.1.16'},
+  {rocDate:'115.1.16',date:'2026-04-06',code:'2317',name:'鴻海',title:'凱基_2317_鴻海_買進_185.pdf',broker:'凱基',rec:'買進',tp:185,close:null,pages:12,type:'individual',id:'d02',driveUrl:'',folder:'115.1.16'},
+  {rocDate:'115.1.16',date:'2026-04-06',code:'',name:'',title:'元大_晨會_115.1.16.pdf',broker:'元大',rec:'',tp:null,close:null,pages:8,type:'morning',id:'d03',driveUrl:'',folder:'115.1.16'},
+  {rocDate:'115.1.15',date:'2026-04-05',code:'2454',name:'聯發科',title:'國泰_2454_聯發科_持有_1050.pdf',broker:'國泰',rec:'持有',tp:1050,close:null,pages:9,type:'individual',id:'d05',driveUrl:'',folder:'115.1.15'}
+];
+
+// ═══════════════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════════════
+let S = {
+  data:[], filtered:[],
+  kw:'', code:'', brokers:new Set(), recs:new Set(),
+  dateFrom:'', dateTo:'', tpMin:'', tpMax:'',
+  page:1, pageSize:15, sk:'date', sd:-1,
+  tab:'all', view:'table',
+  connected:false, activeId:null, activeR:null,
+  bookmarks:[], closeCache:{},
+  syncMeta:{ lastSyncTime:null, knownFolders:[], totalFiles:0 },
+  accessToken: null
+};
+
+// 用於記錄表頭拖拉順序
+let colOrder = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+// ── LocalStorage ──
+function loadLS(){
+  try{
+    S.bookmarks = JSON.parse(localStorage.getItem('rr_bm')||'[]');
+    const sm = JSON.parse(localStorage.getItem('rr_sync')||'null');
+    if(sm) S.syncMeta = sm;
+    const cc = JSON.parse(localStorage.getItem('rr_close')||'null');
+    if(cc) S.closeCache = cc;
+  }catch(e){}
+}
+function saveSM(){ try{localStorage.setItem('rr_sync',JSON.stringify(S.syncMeta));}catch(e){} }
+function saveBm(){ try{localStorage.setItem('rr_bm',JSON.stringify(S.bookmarks));}catch(e){} }
+function saveCC(){ try{localStorage.setItem('rr_close',JSON.stringify(S.closeCache));}catch(e){} }
+
+// ── IndexedDB 大容量本機快取 ──
+const DB_NAME = 'ResearchReportDB';
+const STORE_NAME = 'reports';
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+async function loadDataFromDB() {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const request = tx.objectStore(STORE_NAME).getAll();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  } catch (e) { return []; }
+}
+async function saveDataToDB(data) {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      store.clear();
+      data.forEach(item => store.put(item));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) { console.error('IndexedDB 儲存失敗', e); }
+}
+
+// ═══════════════════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════════════════
+function rocToIso(roc){ const m = String(roc).match(/^(\d{2,3})[.\-\/](\d{1,2})[.\-\/](\d{1,2})$/); if(!m) return null; return `${parseInt(m[1]) + 1911}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`; }
+function isoToRoc(iso){ const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/); if(!m) return iso; return `${parseInt(m[1])-1911}.${parseInt(m[2])}.${parseInt(m[3])}`; }
+function rocKey(roc){ const m = String(roc).match(/^(\d{2,3})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/); if(!m) return roc; return `${String(m[1]).padStart(3,'0')}.${m[2].padStart(2,'0')}.${m[3].padStart(2,'0')}`; }
+function todayIso(){ return new Date().toISOString().slice(0,10); }
+
+function parseFileName(file, folderName){
+  const raw = file.name.replace(/\.pdf$/i,'').replace(/\.PDF$/,'');
+  const isoDate = rocToIso(folderName) || (file.createdTime||'').slice(0,10);
+  let broker='', code='', name='', rec='', tp=null, pages=null, type = 'individual';
+
+  const rawLow = raw.toLowerCase();
+  if(MORNING_KW.some(kw => rawLow.includes(kw.toLowerCase()))){
+    type = 'morning'; broker = BROKERS.find(b => raw.includes(b)) || '';
+    return { id:file.id, rocDate:folderName, date:isoDate, code:'', name:'晨會', title:raw, broker, rec:'晨會', tp:null, close:null, pages:null, type, driveUrl: file.webViewLink||'', folder:folderName };
+  }
+
+  const parts = raw.split(/[_\-\s\|【】（）()]+/).filter(Boolean);
+  for(const p of parts){
+    if(!broker && BROKERS.find(b => p === b || p.includes(b))){ broker = BROKERS.find(b => p === b || p.includes(b)); continue; }
+    if(!code && /^\d{4,5}$/.test(p)){ code = p; continue; }
+    if(!rec && RECS.includes(p)){ rec = p; continue; }
+    if(!tp && /^\d{2,5}$/.test(p) && parseInt(p) >= 10 && parseInt(p) <= 99999 && p !== code){ tp = parseInt(p); continue; }
+    if(!pages && /^\d{1,3}[pP]$/.test(p)){ pages = parseInt(p); continue; }
+    if(!name && /[\u4e00-\u9fff]/.test(p) && p.length >= 2 && !BROKERS.includes(p) && !RECS.includes(p) && !MORNING_KW.some(kw=>p.includes(kw))){ name = p; continue; }
+  }
+
+  const industryKW = ['產業','半導體','電子','金融','航運','鋼鐵','塑化','生技','科技','AI','總經'];
+  if(!code && industryKW.some(kw=>raw.includes(kw))) type = 'industry';
+
+  return { id: file.id, rocDate:folderName, date: isoDate, code: code||'', name: name || (code ? '' : raw.slice(0,20)), title: raw, broker: broker||'', rec: rec||'', tp, close:null, pages, type, driveUrl: file.webViewLink||'', folder: folderName };
+}
+
+async function fetchClosePrice(code){
+  if(!code) return null;
+  const today = todayIso(); const cached = S.closeCache[code];
+  if(cached && cached.date === today) return cached;
+  const dateStr = today.replace(/-/g,''); const url = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${dateStr}&stockNo=${code}`;
+  try{
+    const res = await fetch(url, {signal: AbortSignal.timeout(8000)}); if(!res.ok) return null;
+    const json = await res.json(); if(json.stat !== 'OK' || !json.data || json.data.length === 0) return null;
+    const last = json.data[json.data.length - 1]; const close = parseFloat((last[6]||'').replace(/,/g,'')); if(isNaN(close)) return null;
+    const chgStr = (last[7]||'').replace(/,/g,'').replace('▲','+').replace('▼','-').replace(/[X－\-–]/g,'0');
+    const chg = parseFloat(chgStr) || 0; const pct = (close - chg) > 0 ? Math.round(chg / (close - chg) * 1000) / 10 : 0;
+    const result = {price:close, chg, pct, date:today}; S.closeCache[code] = result; saveCC(); return result;
+  }catch(e){ return null; }
+}
+
+async function fetchAllClose(){
+  const src = getAllData(); const codes = [...new Set(src.map(r=>r.code).filter(c=>c && /^\d{4,5}$/.test(c)))];
+  if(codes.length === 0){ showToast('無個股代號可查詢'); return; }
+  document.getElementById('close-ts').textContent = '載入中...'; showToast(`查詢 ${codes.length} 檔收盤價...`);
+  let done = 0;
+  for(let i=0;i<codes.length;i+=4){
+    const batch = codes.slice(i, i+4);
+    await Promise.all(batch.map(async c=>{ const r = await fetchClosePrice(c); if(r){ src.forEach(x=>{ if(x.code===c) x.close=r.price; }); done++; } }));
+    if(i+4 < codes.length) await sleep(400);
+  }
+  const now = new Date(); document.getElementById('close-ts').textContent = `${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  renderTable(); showToast(`✓ 更新 ${done} 檔昨收價`);
+}
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+function cpCell(r){
+  if(!r.close) return '<span style="color:#ddd">—</span>';
+  const c = S.closeCache[r.code]; const priceStr = r.close.toLocaleString(); if(!c) return `<span>${priceStr}</span>`;
+  const cls = c.chg>0?'cp-up':c.chg<0?'cp-dn':'cp-flat'; const arrow = c.chg>0?'▲':c.chg<0?'▼':'—';
+  return `<span class="${cls}">${priceStr} <span class="cp-pct">${arrow}${Math.abs(c.pct)}%</span></span>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// Google Drive API & Sync (包含切換帳號功能)
+// ═══════════════════════════════════════════════════════
+const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
+let gapiOk=false, gisOk=false, tokenClient;
+const ROC_FOLDER_RE = /^\d{2,3}\.\d{1,2}\.\d{1,2}$/;
+
+function connectDrive(){
+  if(CLIENT_ID === 'YOUR_GOOGLE_CLIENT_ID'){ 
+    showProgress(85, ()=>{ 
+      S.connected = true; S.data = [...DEMO]; 
+      document.getElementById('auth-label').textContent = '示範模式 ✓'; 
+      document.getElementById('auth-btn').classList.add('ok'); 
+      document.getElementById('logout-btn').style.display = 'flex';
+      document.getElementById('btn-sync').disabled = false; 
+      document.getElementById('btn-resync').disabled = false;
+      applyFilters(); fetchAllClose(); 
+    }); 
+    return; 
+  }
+  if(!gapiOk || !gisOk){ showToast('Google API 初始化中，請稍後'); return; }
+  
+  // prompt: 'select_account' 會強制每次跳出選擇帳號視窗
+  tokenClient.requestAccessToken({prompt: 'select_account'});
+}
+
+async function onDriveAuthed(){
+  document.getElementById('auth-label').textContent = 'Drive 已連線 ✓'; 
+  document.getElementById('auth-btn').classList.add('ok'); 
+  document.getElementById('logout-btn').style.display = 'flex';
+  S.connected = true; 
+  document.getElementById('btn-sync').disabled = false; 
+  document.getElementById('btn-resync').disabled = false;
+  
+  if(S.syncMeta.knownFolders.length === 0){ await fullScan(); } 
+  else { await checkNewFolders(); applyFilters(); fetchAllClose(); }
+}
+
+// ★ 登出並清除所有本地快取資料
+async function disconnectDrive() {
+  if(!confirm('確定要登出並清除目前的所有快取資料嗎？\n(這能確保下一個登入的帳號不會看到前一個帳號的報告)')) return;
+
+  // 1. 向 Google 伺服器撤銷 Token 授權
+  if(S.accessToken) {
+    try { google.accounts.oauth2.revoke(S.accessToken); } catch(e){}
+  }
+
+  // 2. 清空 IndexedDB 報告資料庫
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).clear();
+  } catch(e) { console.error('清除資料庫失敗', e); }
+  
+  // 3. 清除 LocalStorage 裡的同步時間紀錄
+  localStorage.removeItem('rr_sync');
+  
+  // 4. 重新載入網頁
+  window.location.reload();
+}
+
+async function reFullScan() {
+  if(!confirm('確定要清除目前的本地快取並重新掃描所有資料夾嗎？')) return;
+  document.getElementById('btn-resync').disabled = true; document.getElementById('btn-sync').disabled = true;
+  document.getElementById('sync-log').innerHTML = '';
+  await fullScan();
+}
+
+async function fullScan(){
+  setSyncDot('syncing'); showLovo('全量掃描 Google Drive...');
+  try{
+    const folders = await listRocFolders(); setLsub(`發現 ${folders.length} 個資料夾`);
+    const allFiles = [];
+    for(let i=0;i<folders.length;i++){ 
+      const f = folders[i]; setLmsg(`讀取 ${f.name} (${i+1}/${folders.length})`); 
+      const files = await listFilesInFolder(f.id, f.name); allFiles.push(...files); syncLog(`✓ ${f.name}：${files.length} 份`); 
+    }
+    S.data = allFiles;
+    S.syncMeta = { lastSyncTime: new Date().toISOString(), knownFolders: folders.map(f=>f.name).sort((a,b)=>rocKey(a).localeCompare(rocKey(b))), totalFiles: allFiles.length };
+    saveSM(); await saveDataToDB(S.data); 
+    setSyncDot('done'); updateSyncPanel(); applyFilters(); showToast(`全量掃描完成：${allFiles.length} 份報告`); fetchAllClose();
+  }catch(err){ setSyncDot('err'); showToast('掃描失敗：'+err.message); }
+  hideLovo(); document.getElementById('btn-resync').disabled = false; document.getElementById('btn-sync').disabled = false;
+}
+
+async function runSync(){
+  if(!S.connected){ showToast('請先連線 Google Drive'); return; }
+  document.getElementById('btn-sync').disabled = true; document.getElementById('btn-resync').disabled = true;
+  setSyncDot('syncing'); document.getElementById('sync-log').classList.add('vis');
+  try{
+    const allFolders = await listRocFolders();
+    const lastKey = S.syncMeta.knownFolders.length ? rocKey(S.syncMeta.knownFolders[S.syncMeta.knownFolders.length-1]) : '000.00.00';
+    const newFolders = allFolders.filter(f => rocKey(f.name) > lastKey);
+    if(newFolders.length === 0){ setSyncDot('done'); showToast('無新資料夾，已是最新'); document.getElementById('btn-sync').disabled = false; document.getElementById('btn-resync').disabled = false; return; }
+    const newFiles = [];
+    for(const f of newFolders){ setLmsg(`讀取 ${f.name}`); const files = await listFilesInFolder(f.id, f.name); newFiles.push(...files); S.syncMeta.knownFolders.push(f.name); syncLog(`✓ ${f.name}：${files.length} 份`); }
+    S.syncMeta.knownFolders.sort((a,b)=>rocKey(a).localeCompare(rocKey(b))); S.data = [...S.data, ...newFiles]; S.syncMeta.lastSyncTime = new Date().toISOString(); S.syncMeta.totalFiles = S.data.length;
+    saveSM(); await saveDataToDB(S.data); setSyncDot('done'); updateSyncPanel(); applyFilters(); showToast(`✓ 同步完成：${newFiles.length} 份新報告`); if(newFiles.length > 0) fetchAllClose();
+  }catch(err){ setSyncDot('err'); showToast('同步失敗：'+err.message); }
+  document.getElementById('btn-sync').disabled = false; document.getElementById('btn-resync').disabled = false;
+}
+
+async function checkNewFolders(){
+  try{
+    const allFolders = await listRocFolders();
+    const lastKey = S.syncMeta.knownFolders.length ? rocKey(S.syncMeta.knownFolders[S.syncMeta.knownFolders.length-1]) : '000.00.00';
+    const newCount = allFolders.filter(f=>rocKey(f.name)>lastKey).length;
+    if(newCount > 0){ document.getElementById('sp-new-row').style.display='flex'; document.getElementById('sp-new').textContent = newCount + ' 個'; setSyncDot('syncing'); } else { setSyncDot('done'); }
+  }catch(e){}
+}
+
+async function listRocFolders(){ let q = `mimeType='application/vnd.google-apps.folder' and trashed=false and '${ROOT_FOLDER_ID}' in parents`; const resp = await gapi.client.drive.files.list({q, fields:'files(id,name)', pageSize:1000}); return (resp.result.files||[]).filter(f => ROC_FOLDER_RE.test(f.name)); }
+async function listFilesInFolder(folderId, folderName){ const resp = await gapi.client.drive.files.list({ q: `'${folderId}' in parents and mimeType='application/pdf' and trashed=false`, fields: 'files(id,name,createdTime,webViewLink)', pageSize: 500, orderBy:'name' }); return (resp.result.files||[]).map(f => parseFileName(f, folderName)); }
+
+function initGapi(){ gapi.load('client', async ()=>{ await gapi.client.init({discoveryDocs:['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest']}); gapiOk = true; }); }
+function initGis(){ 
+  tokenClient = google.accounts.oauth2.initTokenClient({ 
+    client_id: CLIENT_ID, scope: SCOPES, 
+    callback: async resp => { 
+      if(!resp.error) {
+        S.accessToken = resp.access_token; // 記住 Token 供登出用
+        await onDriveAuthed(); 
+      } 
+    } 
+  }); 
+  gisOk = true; 
+}
+if(CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID'){
+  const s1=document.createElement('script');s1.src='https://apis.google.com/js/api.js';s1.onload=initGapi;document.head.appendChild(s1);
+  const s2=document.createElement('script');s2.src='https://accounts.google.com/gsi/client';s2.onload=initGis;document.head.appendChild(s2);
+}
+
+// ═══════════════════════════════════════════════════════
+// UI & Rendering
+// ═══════════════════════════════════════════════════════
+function showLovo(msg){ document.getElementById('lmsg').textContent=msg; document.getElementById('lsub').textContent=''; document.getElementById('lovo').classList.add('show'); }
+function hideLovo(){ document.getElementById('lovo').classList.remove('show'); }
+function setLmsg(t){ document.getElementById('lmsg').textContent=t; }
+function setLsub(t){ document.getElementById('lsub').textContent=t; }
+function showProgress(pct,cb){ const f=document.getElementById('prf'); f.style.width='0%'; setTimeout(()=>f.style.width=pct+'%',50); setTimeout(()=>{ f.style.width='100%'; setTimeout(()=>{ f.style.width='0%'; if(cb)cb(); },300); },900); }
+function setSyncDot(state){ const d=document.getElementById('sdot'); d.className='sdot'; if(state)d.classList.add(state); }
+function syncLog(msg){ const el=document.getElementById('sync-log'); el.classList.add('vis'); el.textContent+=msg+'\n'; el.scrollTop=el.scrollHeight; }
+function fmtTime(iso){ if(!iso)return'從未'; const d=new Date(iso); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2400); }
+function updateSyncPanel(){ document.getElementById('sp-time').textContent = fmtTime(S.syncMeta.lastSyncTime); document.getElementById('sp-folders').textContent = S.syncMeta.knownFolders.length + ' 個'; document.getElementById('sp-total').textContent = S.syncMeta.totalFiles + ' 份'; document.getElementById('slabel').textContent = S.connected ? `已連線 Drive` : `離線模式`; }
+function getAllData(){ return S.data.length ? S.data : DEMO; }
+
+function initChips(){
+  const bg=document.getElementById('broker-grid'); BROKERS.slice(0,16).forEach(b=>{ const el=document.createElement('div'); el.className='chip'; el.textContent=b; el.onclick=()=>{ el.classList.toggle('sel'); el.classList.contains('sel')?S.brokers.add(b):S.brokers.delete(b); applyFilters(); }; bg.appendChild(el); });
+  const rg=document.getElementById('rec-grid'); RECS.forEach(r=>{ const el=document.createElement('div'); el.className='chip'; el.textContent=r; el.onclick=()=>{ el.classList.toggle('sel'); el.classList.contains('sel')?S.recs.add(r):S.recs.delete(r); applyFilters(); }; rg.appendChild(el); });
+}
+
+function selAllB(){ S.brokers=new Set(BROKERS); document.querySelectorAll('#broker-grid .chip').forEach(e=>{ e.classList.add('sel'); S.brokers.add(e.textContent); }); applyFilters(); }
+function clrB(){ S.brokers.clear(); document.querySelectorAll('#broker-grid .chip').forEach(e=>e.classList.remove('sel')); applyFilters(); }
+function setDR(d){ const to=new Date(),from=new Date(); from.setDate(to.getDate()-d); document.getElementById('date-from').value=from.toISOString().slice(0,10); document.getElementById('date-to').value=to.toISOString().slice(0,10); applyFilters(); }
+function clearAll(){ S.kw=''; S.code=''; S.brokers.clear(); S.recs.clear(); S.dateFrom=''; S.dateTo=''; S.tpMin=''; S.tpMax=''; ['kw-input','code-input','date-from','date-to','tp-min','tp-max'].forEach(id=>{ const el=document.getElementById(id); if(el)el.value=''; }); document.querySelectorAll('.chip').forEach(e=>e.classList.remove('sel')); document.getElementById('kwx').classList.remove('vis'); applyFilters(); }
+function switchTab(el,tab){ document.querySelectorAll('.top-nav a').forEach(a=>a.classList.remove('active')); el.classList.add('active'); S.tab=tab; S.page=1; applyFilters(); }
+function onKwInput(el){ S.kw=el.value.trim().toLowerCase(); document.getElementById('kwx').classList.toggle('vis',!!el.value); applyFilters(); }
+function clearKw(){ document.getElementById('kw-input').value=''; document.getElementById('kwx').classList.remove('vis'); S.kw=''; applyFilters(); }
+function srtBy(k){ if(S.sk===k) S.sd*=-1; else{S.sk=k;S.sd=-1;} applyFilters(); }
+function onSortSel(el){ const v=el.value; S.sd=v.includes('-1')?-1:1; S.sk=v.replace('-1','').replace('1',''); applyFilters(); }
+function setView(m){ S.view=m; document.getElementById('vt-tbl').classList.toggle('active',m==='table'); document.getElementById('vt-card').classList.toggle('active',m==='card'); renderTable(); }
+
+function applyFilters(){
+  S.dateFrom=document.getElementById('date-from').value; S.dateTo=document.getElementById('date-to').value; S.code=(document.getElementById('code-input').value||'').trim(); S.tpMin=document.getElementById('tp-min').value; S.tpMax=document.getElementById('tp-max').value;
+  const src = getAllData();
+  S.filtered = src.filter(r=>{
+    if(S.tab==='individual' && r.type!=='individual') return false; if(S.tab==='morning' && r.type!=='morning') return false; if(S.tab==='industry' && r.type!=='industry') return false;
+    if(S.kw){ const hay = (r.title+' '+(r.name||'')+' '+(r.broker||'')+' '+(r.code||'')+' '+(r.folder||'')).toLowerCase(); if(!hay.includes(S.kw)) return false; }
+    if(S.code && !(r.code||'').startsWith(S.code) && !(r.name||'').includes(S.code)) return false;
+    if(S.brokers.size && !S.brokers.has(r.broker)) return false; if(S.recs.size && !S.recs.has(r.rec)) return false;
+    if(S.dateFrom && r.date < S.dateFrom) return false; if(S.dateTo && r.date > S.dateTo) return false;
+    if(S.tpMin && r.tp < +S.tpMin) return false; if(S.tpMax && r.tp > +S.tpMax) return false;
+    return true;
+  });
+  S.filtered.sort((a,b)=>{ let av=a[S.sk]||'', bv=b[S.sk]||''; return (typeof av==='string' ? av.localeCompare(bv,undefined,{numeric:true}) : (av-bv)) * S.sd; });
+  S.page=1; updateStats(); updateTags(); renderTable();
+}
+
+function updateStats(){
+  const today = todayIso(); document.getElementById('st-total').textContent = S.filtered.length; document.getElementById('st-today').textContent = S.filtered.filter(r=>r.date===today).length; document.getElementById('st-brokers').textContent = new Set(S.filtered.map(r=>r.broker).filter(Boolean)).size; document.getElementById('st-buy').textContent = S.filtered.filter(r=>['買進','強力買進','加碼'].includes(r.rec)).length; document.getElementById('st-all').textContent = S.syncMeta.totalFiles || getAllData().length;
+}
+
+function updateTags(){
+  const bar=document.getElementById('tag-bar'); bar.innerHTML='';
+  const add=(lbl,rm)=>{ const t=document.createElement('div'); t.className='ftag'; t.innerHTML=`<span>${lbl}</span><button>×</button>`; t.querySelector('button').onclick=rm; bar.appendChild(t); };
+  if(S.kw) add('關鍵字: '+S.kw, ()=>{ document.getElementById('kw-input').value=''; S.kw=''; document.getElementById('kwx').classList.remove('vis'); applyFilters(); });
+  if(S.code) add('股票: '+S.code, ()=>{ document.getElementById('code-input').value=''; S.code=''; applyFilters(); });
+  S.brokers.forEach(b=>add('券商: '+b, ()=>{ S.brokers.delete(b); document.querySelectorAll('#broker-grid .chip').forEach(e=>{ if(e.textContent===b)e.classList.remove('sel'); }); applyFilters(); }));
+  S.recs.forEach(r=>add('建議: '+r, ()=>{ S.recs.delete(r); document.querySelectorAll('#rec-grid .chip').forEach(e=>{ if(e.textContent===r)e.classList.remove('sel'); }); applyFilters(); }));
+  if(S.dateFrom) add('從: '+S.dateFrom, ()=>{ document.getElementById('date-from').value=''; S.dateFrom=''; applyFilters(); });
+  if(S.dateTo) add('至: '+S.dateTo, ()=>{ document.getElementById('date-to').value=''; S.dateTo=''; applyFilters(); });
+  if(S.tpMin) add('目標≥'+S.tpMin, ()=>{ document.getElementById('tp-min').value=''; S.tpMin=''; applyFilters(); });
+  if(S.tpMax) add('目標≤'+S.tpMax, ()=>{ document.getElementById('tp-max').value=''; S.tpMax=''; applyFilters(); });
+}
+
+function hl(t,k){ if(!k||!t)return String(t||''); return String(t).replace(new RegExp('('+k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'),'<mark>$1</mark>'); }
+function bc(r){ return {'買進':'b-buy','強力買進':'b-sbuy','加碼':'b-sbuy','持有':'b-hold','中立':'b-neu','減碼':'b-sell','賣出':'b-sell','晨會':'b-morning'}[r]||'b-neu'; }
+function isBm(id){ return S.bookmarks.some(b=>b.id===id); }
+
+// ── 表格欄位拖拉縮放邏輯 ──
+function applyColumnOrder() {
+  const table = document.getElementById('main-table'); if(!table) return;
+  const cg = table.querySelector('colgroup'); const theadTr = table.querySelector('thead tr');
+  colOrder.forEach(idx => {
+    const col = cg.querySelector(`col[data-idx="${idx}"]`); if(col) cg.appendChild(col);
+    const th = theadTr.querySelector(`th[data-idx="${idx}"]`); if(th) theadTr.appendChild(th);
+  });
+  table.querySelectorAll('tbody tr').forEach(tr => { colOrder.forEach(idx => { const td = tr.querySelector(`td[data-idx="${idx}"]`); if(td) tr.appendChild(td); }); });
+}
+
+function initTableInteractions() {
+  const ths = document.querySelectorAll('#main-table th'); let dragColIdx = null;
+  ths.forEach((th) => {
+    th.draggable = true;
+    th.addEventListener('dragstart', (e) => { dragColIdx = th.getAttribute('data-idx'); th.classList.add('dragging'); e.dataTransfer.setData('text/plain', dragColIdx); });
+    th.addEventListener('dragover', (e) => { e.preventDefault(); th.classList.add('drag-over'); });
+    th.addEventListener('dragleave', () => th.classList.remove('drag-over'));
+    th.addEventListener('drop', (e) => {
+      e.preventDefault(); th.classList.remove('drag-over'); const targetColIdx = th.getAttribute('data-idx');
+      if (dragColIdx !== null && dragColIdx !== targetColIdx) {
+        const fromPos = colOrder.indexOf(parseInt(dragColIdx)); const toPos = colOrder.indexOf(parseInt(targetColIdx));
+        const moved = colOrder.splice(fromPos, 1)[0]; colOrder.splice(toPos, 0, moved); applyColumnOrder();
+      }
+      dragColIdx = null;
+    });
+    th.addEventListener('dragend', () => document.querySelectorAll('#main-table th').forEach(t => t.classList.remove('dragging', 'drag-over')));
+    
+    const resizer = document.createElement('div'); resizer.classList.add('resizer'); th.appendChild(resizer);
+    let startX, startW;
+    resizer.addEventListener('mousedown', function(e) {
+      e.stopPropagation(); th.draggable = false; startX = e.clientX;
+      const idx = th.getAttribute('data-idx'); const col = document.querySelector(`col[data-idx="${idx}"]`); startW = col.getBoundingClientRect().width; resizer.classList.add('resizing');
+      function doDrag(ev) { const newW = startW + (ev.clientX - startX); col.style.width = Math.max(30, newW) + 'px'; }
+      function stopDrag() { document.removeEventListener('mousemove', doDrag); document.removeEventListener('mouseup', stopDrag); resizer.classList.remove('resizing'); th.draggable = true; }
+      document.addEventListener('mousemove', doDrag); document.addEventListener('mouseup', stopDrag);
+    });
+  });
+}
+
+function renderTable(){
+  const start=(S.page-1)*S.pageSize; const page=S.filtered.slice(start,start+S.pageSize); const tbody=document.getElementById('result-body'); const nores=document.getElementById('nores'); const mt=document.getElementById('main-table'); const cg=document.getElementById('card-grid');
+  if(S.filtered.length===0){ tbody.innerHTML=''; nores.style.display='block'; mt.style.display='none'; cg.style.display='none'; document.getElementById('pgi').textContent='—'; document.getElementById('pbs').innerHTML=''; return; }
+  nores.style.display='none';
+  if(S.view==='card'){
+    mt.style.display='none'; cg.style.display='grid';
+    cg.innerHTML=page.map(r=>`<div class="card${S.activeId===r.id?' arow':''}" onclick="selReport('${r.id}')"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px"><span style="font-size:10px;color:#888">${r.rocDate}</span><span class="badge ${bc(r.rec)}">${r.rec||'—'}</span></div><div style="font-size:12px;font-weight:700;color:#2563eb;margin-bottom:2px">${r.code?r.code+' ':''}<span style="color:#1a1a1a;font-weight:600">${hl(r.name||'',S.kw)}</span></div><div style="font-size:11px;color:#555;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${hl(r.title,S.kw)}</div><div style="display:flex;align-items:center;justify-content:space-between;font-size:11px"><span style="color:#888">${hl(r.broker||'',S.kw)}</span><span style="font-weight:700">${r.tp?r.tp.toLocaleString()+'元':''}${r.close?` · <span style="${S.closeCache[r.code]?.chg>0?'color:#dc2626':'color:#16a34a'}">${r.close.toLocaleString()}</span>`:''}</span></div></div>`).join('');
+  } else {
+    mt.style.display=''; cg.style.display='none';
+    tbody.innerHTML=page.map(r=>{
+      const bm=isBm(r.id); const up = r.tp&&r.close ? Math.round((r.tp/r.close-1)*100) : null;
+      return `<tr onclick="selReport('${r.id}')" class="${S.activeId===r.id?'arow':''}">
+        <td data-idx="0" class="mu" style="white-space:nowrap">${r.rocDate}</td>
+        <td data-idx="1" style="font-weight:700;color:#2563eb">${hl(r.code||'—',S.kw)}</td>
+        <td data-idx="2" style="font-weight:500">${hl(r.name||'',S.kw)}</td>
+        <td data-idx="3" title="${r.title}">${hl(r.title,S.kw)}</td>
+        <td data-idx="4" class="mu">${hl(r.broker||'',S.kw)}</td>
+        <td data-idx="5"><span class="badge ${bc(r.rec)}">${r.rec||'—'}</span></td>
+        <td data-idx="6" class="mu" style="text-align:right">${r.tp?r.tp.toLocaleString():'—'}${up!==null?`<span style="font-size:10px;color:${up>=0?'#15803d':'#b91c1c'};margin-left:3px">${up>=0?'+':''}${up}%</span>`:''}</td>
+        <td data-idx="7" style="text-align:right">${cpCell(r)}</td>
+        <td data-idx="8" class="mu" style="text-align:center">${r.pages||'—'}</td>
+        <td data-idx="9"><div class="ra"><button class="ab${bm?' bmd':''}" onclick="toggleBm(event,'${r.id}')" title="收藏">${bm?'★':'☆'}</button>${r.driveUrl?`<a class="ab" href="${r.driveUrl}" target="_blank" onclick="event.stopPropagation()" title="開啟PDF"><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M2.5 11.5L11.5 2.5M11.5 2.5H6.5M11.5 2.5V7.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></a>`:`<span class="ab" style="opacity:.2"><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M2.5 11.5L11.5 2.5M11.5 2.5H6.5M11.5 2.5V7.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>`}</div></td>
+      </tr>`;
+    }).join('');
+    applyColumnOrder();
+  }
+  const total=Math.ceil(S.filtered.length/S.pageSize); document.getElementById('pgi').textContent=`第 ${start+1}–${Math.min(start+S.pageSize,S.filtered.length)} 筆，共 ${S.filtered.length} 筆`;
+  let btns=`<button class="pb" onclick="goP(1)" ${S.page===1?'disabled':''}>«</button><button class="pb" onclick="goP(${S.page-1})" ${S.page===1?'disabled':''}>‹</button>`; const lo=Math.max(1,S.page-2), hi=Math.min(total,S.page+2); for(let i=lo;i<=hi;i++) btns+=`<button class="pb${i===S.page?' active':''}" onclick="goP(${i})">${i}</button>`; btns+=`<button class="pb" onclick="goP(${S.page+1})" ${S.page===total?'disabled':''}>›</button><button class="pb" onclick="goP(${total})" ${S.page===total?'disabled':''}>»</button>`; document.getElementById('pbs').innerHTML=btns;
+}
+function goP(p){ S.page=p; renderTable(); document.getElementById('table-wrap').scrollTop=0; }
+
+function selReport(id){
+  const r=getAllData().find(x=>x.id===id); if(!r)return; S.activeId=id; S.activeR=r; renderTable();
+  document.getElementById('pv-title').textContent=r.title; document.getElementById('pv-roc').textContent=r.rocDate; document.getElementById('pv-code').textContent=(r.code?r.code+' ':'')+r.name; document.getElementById('pv-broker').textContent=r.broker||'—'; document.getElementById('pv-folder').textContent=r.folder||'—';
+  document.getElementById('pv-rec').innerHTML=`<span style="display:inline-block;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:700;background:${RB[r.rec]||'#f1f0eb'};color:${RC[r.rec]||'#555'}">${r.rec||'—'}</span>`;
+  const up=r.tp&&r.close?Math.round((r.tp/r.close-1)*100):null; document.getElementById('pv-tp').textContent=r.tp?r.tp.toLocaleString()+'元':'—';
+  if(r.close){ const c=S.closeCache[r.code]; const arrow=c?.chg>0?'▲':c?.chg<0?'▼':''; const cls=c?.chg>0?'cp-up':c?.chg<0?'cp-dn':'cp-flat'; document.getElementById('pv-close').innerHTML=`<span class="${cls}">${r.close.toLocaleString()} ${arrow}${c?Math.abs(c.pct)+'%':''}</span>`; } else { document.getElementById('pv-close').innerHTML=`<span style="color:#bbb;font-size:12px;cursor:pointer" onclick="fetchClosePrice('${r.code}').then(c=>{if(c){getAllData().forEach(x=>{if(x.code==='${r.code}')x.close=c.price});selReport('${r.id}');}})">點擊查詢</span>`; }
+  if(up!==null){ const el=document.getElementById('pv-upside'); el.textContent=(up>=0?'+':'')+up+'%'; el.style.color=up>=0?'#15803d':'#b91c1c'; } else document.getElementById('pv-upside').textContent='—';
+  const sameFolder=getAllData().filter(x=>x.folder===r.folder&&x.id!==id).slice(0,5); document.getElementById('pv-folder-files').innerHTML=sameFolder.length ? sameFolder.map(x=>`<div class="sim-item" onclick="selReport('${x.id}')"><div class="sim-d">${x.broker} <span class="badge ${bc(x.rec)}" style="padding:1px 4px">${x.rec||'—'}</span></div><div class="sim-t">${x.title}</div></div>`).join('') : '<div style="font-size:12px;color:#bbb">無其他報告</div>';
+  const sim=getAllData().filter(x=>x.code&&x.code===r.code&&x.id!==id).slice(0,4); document.getElementById('pv-sim').innerHTML=sim.length ? sim.map(x=>`<div class="sim-item" onclick="selReport('${x.id}')"><div class="sim-d">${x.rocDate} · ${x.broker} <span class="badge ${bc(x.rec)}" style="padding:1px 4px">${x.rec||'—'}</span></div><div class="sim-t">${x.title}</div></div>`).join('') : '<div style="font-size:12px;color:#bbb">無其他報告</div>';
+  document.getElementById('pvbm').textContent=isBm(id)?'★ 已收藏':'☆ 加入收藏'; document.getElementById('preview').classList.add('open');
+}
+function closePv(){ document.getElementById('preview').classList.remove('open'); S.activeId=null; S.activeR=null; renderTable(); }
+function openCurr(){ if(S.activeR?.driveUrl) window.open(S.activeR.driveUrl,'_blank'); }
+function toggleBm(e,id){ e.stopPropagation(); const r=getAllData().find(x=>x.id===id); if(!r)return; if(isBm(id)) S.bookmarks=S.bookmarks.filter(b=>b.id!==id); else S.bookmarks.push(r); saveBm(); renderTable(); updateBmCount(); if(S.activeR?.id===id) document.getElementById('pvbm').textContent=isBm(id)?'★ 已收藏':'☆ 加入收藏'; showToast(isBm(id)?'已加入收藏 ★':'已移除收藏'); }
+function toggleBmCurr(){ if(S.activeR) toggleBm({stopPropagation:()=>{}},S.activeR.id); }
+function updateBmCount(){ document.getElementById('bm-count').textContent=S.bookmarks.length; }
+function toggleBmPanel(){ const p=document.getElementById('bmp'); p.classList.toggle('open'); if(p.classList.contains('open')) renderBmList(); }
+function renderBmList(){ const list=document.getElementById('bml'); if(!S.bookmarks.length){ list.innerHTML='<div class="bme">尚無收藏報告</div>'; return; } list.innerHTML=S.bookmarks.map(r=>`<div class="bmi" onclick="selReport('${r.id}');toggleBmPanel()"><div class="bmi-c">${r.rocDate} ${r.code}</div><div class="bmi-n">${r.name||''} · ${r.broker||''}</div><div class="bmi-t">${r.title}</div><button class="bmrm" onclick="event.stopPropagation();S.bookmarks=S.bookmarks.filter(b=>b.id!=='${r.id}');saveBm();updateBmCount();renderBmList()">×</button></div>`).join(''); }
+
+function exportCSV(){ const h=['日期(民國)','西元日期','代號','名稱','標題','券商','建議','目標價','昨收','頁數','資料夾','類型']; const rows=S.filtered.map(r=>[r.rocDate,r.date,r.code,r.name,'"'+(r.title||'').replace(/"/g,'""')+'"',r.broker,r.rec,r.tp||'',r.close||'',r.pages||'',r.folder,r.type].join(',')); dl(new Blob(['\uFEFF'+h.join(',')+'\n'+rows.join('\n')],{type:'text/csv;charset=utf-8'}),'research_reports.csv'); }
+function exportJSON(){ dl(new Blob([JSON.stringify(S.filtered,null,2)],{type:'application/json'}),'research_reports.json'); document.getElementById('ddm').classList.remove('open'); }
+function dl(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
+
+let chartTab='broker';
+function openChartModal(){ document.getElementById('mo').classList.add('open'); renderChart(); }
+function closeChart(){ document.getElementById('mo').classList.remove('open'); }
+function switchCtab(el,tab){ document.querySelectorAll('.ctab').forEach(t=>t.classList.remove('active')); el.classList.add('active'); chartTab=tab; renderChart(); }
+function renderChart(){
+  const el=document.getElementById('chart-content'); const src=S.filtered.length?S.filtered:getAllData();
+  const makeBar=(entries,colorFn)=>'<div class="bar-chart">'+entries.map(([k,v],i)=>`<div class="br"><div class="bl" title="${k}">${k}</div><div class="bt"><div class="bf" style="width:${Math.round(v/entries[0][1]*100)}%;background:${colorFn(k,i)}">${v}</div></div><div class="bc2">${v}</div></div>`).join('')+'</div>';
+  if(chartTab==='broker'){ const m={}; src.forEach(r=>{if(r.broker)m[r.broker]=(m[r.broker]||0)+1;}); el.innerHTML=makeBar(Object.entries(m).sort((a,b)=>b[1]-a[1]),(k,i)=>COLORS[i%COLORS.length]); }
+  else if(chartTab==='rec'){ const m={}; src.forEach(r=>{if(r.rec)m[r.rec]=(m[r.rec]||0)+1;}); el.innerHTML=makeBar(Object.entries(m).sort((a,b)=>b[1]-a[1]),k=>RC[k]||'#888'); }
+  else if(chartTab==='date'){ const m={}; src.forEach(r=>{const d=r.rocDate?r.rocDate.slice(0,6):'';if(d)m[d]=(m[d]||0)+1;}); el.innerHTML=makeBar(Object.entries(m).sort((a,b)=>a[0].localeCompare(b[0])),(k,i)=>'#2563eb'); }
+  else { const m={}; src.forEach(r=>{if(r.code){const k=r.code+(r.name?' '+r.name:'');m[k]=(m[k]||0)+1;}}); el.innerHTML=makeBar(Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,12),(k,i)=>COLORS[i%COLORS.length]); }
+}
+
+async function init(){
+  loadLS(); initChips();
+  const savedReports = await loadDataFromDB();
+  if (savedReports && savedReports.length > 0) { S.data = savedReports; } else { S.data = DEMO; }
+  updateSyncPanel(); applyFilters(); updateBmCount(); initTableInteractions();
+  document.addEventListener('keydown',e=>{ if(e.key==='/'&&!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();document.getElementById('kw-input').focus();} });
+  setTimeout(fetchAllClose, 1000);
+}
+init();
+</script>
+</body>
+</html>
