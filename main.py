@@ -1,54 +1,76 @@
 import streamlit as st
-import os, json, base64
-import streamlit.components.v1 as components
+import os
+import base64
 from parsers import extract_financial_data
 
-st.set_page_config(layout="wide", page_title="研究報告系統")
+# 頁面基本設定
+st.set_page_config(layout="wide", page_title="證券研究報告檢索系統")
 
-# 改用更正式的變數名，避開攔截器
+# 路徑設定
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-REPORT_FOLDER = os.path.join(BASE_DIR, "reports")
-# 建議將 test.html 改名為 index.html
-HTML_PATH = os.path.join(BASE_DIR, "test.html") 
+REPORT_DIR = os.path.join(BASE_DIR, "reports")
 
-def get_b64_safe(path):
-    with open(path, "rb") as f:
-        # 使用 standard b64 確保格式正確
-        return base64.b64encode(f.read()).decode('utf-8')
-
-def get_data():
-    if not os.path.exists(REPORT_FOLDER): return []
-    files = [f for f in os.listdir(REPORT_FOLDER) if f.lower().endswith(".pdf")]
-    res = []
-    for f in files:
-        path = os.path.join(REPORT_FOLDER, f)
-        # 抓取解析後的文字資料
-        info = extract_financial_data(path) 
-        # 這裡不塞入 base64，避免 JSON 太大被攔截器砍掉
-        info["id"] = f 
-        res.append(info)
-    return res
+def get_pdf_download_link(file_path, file_name):
+    """生成一個點擊即可預覽/下載的連結"""
+    with open(file_path, "rb") as f:
+        bytes = f.read()
+        b64 = base64.b64encode(bytes).decode()
+        href = f'<a href="data:application/pdf;base64,{b64}" target="_blank" style="text-decoration:none; background-color:#4CAF50; color:white; padding:8px 16px; border-radius:5px;">開啟報告</a>'
+        return href
 
 st.title("📂 證券研究報告管理系統")
 
-# 顯示偵測狀態
-data_list = get_data()
-if not data_list:
-    st.error(f"路徑偵測失敗或無 PDF 檔案: {REPORT_FOLDER}")
+# 1. 偵測檔案
+if not os.path.exists(REPORT_DIR):
+    st.error(f"找不到 reports 資料夾，請確認路徑：{REPORT_DIR}")
 else:
-    st.success(f"系統就緒：已偵測到 {len(data_list)} 份報告")
+    files = [f for f in os.listdir(REPORT_DIR) if f.lower().endswith(".pdf")]
+    
+    if not files:
+        st.warning("reports 資料夾內沒有 PDF 檔案。")
+    else:
+        st.success(f"已偵測到 {len(files)} 份報告")
+        
+        # 2. 準備表格資料
+        table_data = []
+        for f in files:
+            full_path = os.path.join(REPORT_DIR, f)
+            # 呼叫解析器
+            info = extract_financial_data(full_path)
+            
+            # 生成預覽連結
+            link_html = get_pdf_download_link(full_path, f)
+            
+            # 整理成表格格式
+            table_data.append({
+                "日期": info.get("日期", "-"),
+                "代號": info.get("代號", "-"),
+                "名稱": info.get("名稱", "-"),
+                "券商": info.get("券商", "-"),
+                "建議": info.get("建議", "-"),
+                "目標價": info.get("目標價", "-"),
+                "檔案連結": link_html
+            })
 
-# 讀取 HTML 模板
-if os.path.exists(HTML_PATH):
-    with open(HTML_PATH, "r", encoding="utf-8") as f:
-        html_code = f.read()
-    
-    # 注入純文字資料
-    json_data = json.dumps(data_list, ensure_ascii=False)
-    # 確保 HTML 裡的 const src = []; 這行沒有被攔截器過濾
-    final_html = html_code.replace("const src = [];", f"const reportData = {json_data};")
-    
-    # 增加元件寬度，減少被誤判為邊欄廣告的機率
-    components.html(final_html, height=900, scrolling=True)
-else:
-    st.warning("請確認 test.html 是否與 main.py 放在同一個資料夾")
+        # 3. 顯示表格 (使用 Streamlit 原生 Markdown 渲染，避開 ERR_BLOCKED_BY_CLIENT)
+        # 我們將 HTML 注入 Markdown 列表中
+        st.write("---")
+        
+        # 建立表頭
+        cols = st.columns([1, 1, 2, 1, 1, 1, 1])
+        headers = ["日期", "代號", "名稱", "券商", "建議", "目標價", "操作"]
+        for col, h in zip(cols, headers):
+            col.write(f"**{h}**")
+            
+        st.write("---")
+
+        # 逐行顯示
+        for row in table_data:
+            c1, c2, c3, c4, c5, c6, c7 = st.columns([1, 1, 2, 1, 1, 1, 1])
+            c1.write(row["日期"])
+            c2.write(row["代號"])
+            c3.write(row["名稱"])
+            c4.write(row["券商"])
+            c5.write(row["建議"])
+            c6.write(f":red[{row['目標價']}]")
+            c7.markdown(row["檔案連結"], unsafe_allow_html=True)
