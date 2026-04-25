@@ -1,67 +1,40 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <style>
-        body { background-color: #f8f9fa; color: #333; padding: 20px; font-family: sans-serif; }
-        .card { background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th { background: #007bff; color: white; padding: 12px; }
-        td { padding: 12px; border-bottom: 1px solid #dee2e6; text-align: center; }
-        button { cursor: pointer; background: #28a745; color: white; border: none; padding: 8px 16px; border-radius: 4px; }
-        button:hover { background: #218838; }
-    </style>
-</head>
-<body>
-    <div class="card">
-        <h2 id="msg">正在等待 Python 傳輸資料...</h2>
-        <table id="mainTable" style="display:none;">
-            <thead>
-                <tr>
-                    <th>檔案名稱</th>
-                    <th>預計代號</th>
-                    <th>報告預覽</th>
-                </tr>
-            </thead>
-            <tbody id="content"></tbody>
-        </table>
-    </div>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="background: white; padding: 20px;">
+    <div id="debug-info" style="color: red; font-weight: bold; margin-bottom: 10px;"></div>
+    <table border="1" style="width:100%; border-collapse: collapse;">
+        <thead>
+            <tr style="background: #f2f2f2;">
+                <th>檔案名稱</th>
+                <th>動作</th>
+            </tr>
+        </thead>
+        <tbody id="list"></tbody>
+    </table>
 
     <script>
-        // 這是預留位置，Python 會把資料塞進這裡
-        /*DATA_PLACEHOLDER*/
+        // Python 會填入這裡
+        const src = []; 
 
         window.onload = function() {
-            const msg = document.getElementById('msg');
-            const table = document.getElementById('mainTable');
-            const tbody = document.getElementById('content');
+            const list = document.getElementById('list');
+            const debug = document.getElementById('debug-info');
 
-            // 檢查 src 是否存在 (由 Python 注入)
-            if (typeof src !== 'undefined' && src.length > 0) {
-                msg.innerText = "✅ 成功載入 " + src.length + " 份報告";
-                table.style.display = "table";
-                
-                tbody.innerHTML = src.map(item => `
+            if (src.length === 0) {
+                debug.innerText = "⚠️ 警告：JavaScript 收到的是空陣列，請檢查 Python 是否有抓到 PDF。";
+                list.innerHTML = '<tr><td colspan="2">等待資料中...</td></tr>';
+            } else {
+                debug.innerText = "🟢 JavaScript 已成功接收 " + src.length + " 筆資料";
+                debug.style.color = "green";
+                list.innerHTML = src.map(item => `
                     <tr>
                         <td>${item.filename}</td>
-                        <td><strong>${item.代號}</strong></td>
-                        <td><button onclick="preview('${item.pdfData}')">點我開啟</button></td>
+                        <td><button onclick="window.open().document.write('<iframe width=\\\'100%\\\' height=\\\'100%\\\' src=\\\'${item.pdf}\\\'></iframe>')">開啟報告</button></td>
                     </tr>
                 `).join('');
-            } else {
-                msg.innerText = "❌ 失敗：Python 有執行，但資料陣列是空的或是太大了傳不動。";
-                msg.style.color = "red";
             }
         };
-
-        function preview(base64) {
-            const win = window.open();
-            if(!win) {
-                alert("彈出視窗被攔截，請允許開啟分頁");
-                return;
-            }
-            win.document.write('<body style="margin:0"><iframe src="' + base64 + '" frameborder="0" style="border:0; width:100%; height:100%;"></iframe></body>');
-        }
     </script>
 </body>
 </html>
