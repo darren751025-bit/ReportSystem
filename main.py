@@ -2,76 +2,87 @@ import streamlit as st
 import os
 import pandas as pd
 import streamlit.components.v1 as components
+from datetime import date
 from parsers import extract_financial_data
-from datetime import datetime
 
-# 頁面配置
-st.set_page_config(layout="wide", page_title="券商研究系統 V2")
+# 1. 頁面配置
+st.set_page_config(layout="wide", page_title="證券研究報告系統")
 
-# --- 側邊欄：時間選擇與登入 ---
-st.sidebar.title("🔍 系統過濾")
-start_date = st.sidebar.date_input("起始日期", datetime(2024, 1, 1))
-end_date = st.sidebar.date_input("結束日期", datetime.now())
+# --- 2. 側邊欄：過濾與登入 ---
+with st.sidebar:
+    st.header("🔍 篩選與管理")
+    
+    # 時間篩選器
+    st.subheader("報告日期範圍")
+    d_range = st.date_input(
+        "選擇區間",
+        [date(2024, 1, 1), date.today()],
+        key="date_range"
+    )
+    
+    st.markdown("---")
+    st.subheader("🔐 會員中心")
+    st.text_input("帳號", placeholder="Admin")
+    st.text_input("密碼", type="password")
+    if st.button("確認登入", use_container_width=True):
+        st.toast("連線成功")
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("👤 會員中心")
-st.sidebar.text_input("帳號")
-st.sidebar.text_input("密碼", type="password")
-st.sidebar.button("登入系統")
-
-# --- 主視覺區域 (載入 test001.html) ---
+# --- 3. 載入外觀樣式 (test001.html) ---
 try:
     with open("test001.html", "r", encoding="utf-8") as f:
-        components.html(f.read(), height=150)
+        components.html(f.read(), height=120)
 except:
-    st.title("證券研究報告系統")
+    st.title("證券研究報告檢索系統")
 
-# --- 檔案處理邏輯 ---
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-REPORT_DIR = os.path.join(BASE_DIR, "reports")
-
-if os.path.exists(REPORT_DIR):
+# --- 4. 檔案處理邏輯 ---
+REPORT_DIR = "reports"
+if not os.path.exists(REPORT_DIR):
+    os.makedirs(REPORT_DIR)
+    st.info("請將 PDF 檔案放入 reports 資料夾後重新整理。")
+else:
     files = [f for f in os.listdir(REPORT_DIR) if f.lower().endswith(".pdf")]
     
     if files:
+        # 解析所有檔案
         all_data = []
         for f in files:
             res = extract_financial_data(os.path.join(REPORT_DIR, f))
-            res["filename"] = f
+            res["file_id"] = f # 記錄檔名供下載使用
             all_data.append(res)
         
-        # 轉換 DataFrame 並進行時間過濾
         df = pd.DataFrame(all_data)
-        # 確保日期格式正確以便過濾
-        df['日期'] = pd.to_datetime(df['日期']).dt.date
-        filtered_df = df[(df['日期'] >= start_date) & (df['日期'] <= end_date)]
-
-        # --- 卡片式版面顯示 ---
-        st.subheader(f"📊 搜尋結果 ({len(filtered_df)} 份報告)")
         
-        # 每列顯示 3 個卡片
+        # 執行時間篩選
+        if isinstance(d_range, list) and len(d_range) == 2:
+            df = df[(df['日期'] >= d_range[0]) & (df['日期'] <= d_range[1])]
+
+        st.write(f"📂 目前顯示 **{len(df)}** 份報告")
+
+        # --- 5. 卡片式版面顯示 (三欄) ---
         cols = st.columns(3)
-        for idx, row in filtered_df.iterrows():
+        for idx, row in df.reset_index().iterrows():
             with cols[idx % 3]:
-                with st.container():
-                    st.markdown(f"""
-                    <div style="border:1px solid #e6e6e6; border-radius:10px; padding:15px; margin-bottom:10px; background-color:white; box-shadow: 2px 2px 5px rgba(0,0,0,0.05);">
-                        <h4 style="margin:0; color:#1e3a8a;">{row['名稱']}</h4>
-                        <p style="font-size:0.9em; color:gray;">📅 日期: {row['日期']} | 🏢 券商: {row['券商']}</p>
-                        <hr style="margin:10px 0;">
-                        <p><b>建議：</b> {row['建議']} | <b>目標價：</b> <span style="color:red;">{row['目標價']}</span></p>
+                # 這裡使用 HTML 呈現卡片樣式
+                st.markdown(f"""
+                <div style="background: white; border-radius: 10px; padding: 15px; border: 1px solid #ddd; margin-bottom: 10px;">
+                    <div style="color: #1e3a8a; font-weight: bold;">{row['名稱']}</div>
+                    <div style="font-size: 0.85em; color: #666; margin-top: 5px;">
+                        📅 {row['日期']} | 🏢 {row['券商']}
                     </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # 下載按鈕放卡片下方
-                    with open(os.path.join(REPORT_DIR, row['filename']), "rb") as b:
-                        st.download_button(
-                            label=f"📥 下載報告",
-                            data=b,
-                            file_name=row['filename'],
-                            key=f"dl_{idx}"
-                        )
+                    <div style="margin-top: 8px; font-size: 0.9em;">
+                        建議：<b>{row['建議']}</b> | 目標價：<span style="color:red;">{row['目標價']}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # 原生下載按鈕
+                with open(os.path.join(REPORT_DIR, row['file_id']), "rb") as f_bytes:
+                    st.download_button(
+                        label=f"📥 下載報告",
+                        data=f_bytes,
+                        file_name=row['file_id'],
+                        key=f"dl_{idx}",
+                        use_container_width=True
+                    )
     else:
-        st.info("請在 reports 資料夾中放入 PDF 檔案。")
-else:
-    st.error("系統路徑錯誤：找不到 reports 資料夾。")
+        st.warning("reports 資料夾內尚無 PDF 檔案。")
