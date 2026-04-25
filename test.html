@@ -3,65 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <style>
-        body { font-family: "Microsoft JhengHei", sans-serif; background: #f0f2f5; padding: 20px; }
-        .box { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th { background: #003366; color: white; padding: 12px; text-align: left; }
-        td { padding: 12px; border-bottom: 1px solid #ddd; font-size: 14px; }
-        .btn { padding: 5px 10px; border-radius: 4px; cursor: pointer; border: none; font-size: 12px; color: white; text-decoration: none; }
-        .btn-v { background: #28a745; margin-right: 5px; }
-        .btn-d { background: #6c757d; }
+        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; }
+        .table-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #004080; color: white; padding: 12px; text-align: left; }
+        td { padding: 12px; border-bottom: 1px solid #ddd; }
+        .btn-view { background: #28a745; color: white; border: none; padding: 6px 12px; cursor: pointer; border-radius: 4px; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; background: #eee; }
     </style>
 </head>
 <body>
-    <div class="box">
-        <h2 id="title">載入中...</h2>
+    <div class="table-container">
+        <h2 id="count-title">載入中...</h2>
         <table>
             <thead>
                 <tr>
                     <th>日期</th>
-                    <th>代號/名稱</th>
+                    <th>個股代號/名稱</th>
                     <th>券商</th>
-                    <th>投資建議</th>
-                    <th>目標價</th>
-                    <th>功能</th>
+                    <th>建議</th>
+                    <th>目標價 / 昨收</th>
+                    <th>操作</th>
                 </tr>
             </thead>
-            <tbody id="content"></tbody>
+            <tbody id="main-table"></tbody>
         </table>
     </div>
 
     <script>
-        const src = []; // 由 main.py 噴入資料
+        // 這個變數會被 Python 的 .replace 替換掉
+        const src = []; 
 
-        function preview(base64) {
-            const win = window.open("");
-            win.document.write(`<body style="margin:0"><embed width="100%" height="100%" src="${base64}" type="application/pdf"></body>`);
+        function openPDF(data) {
+            const win = window.open();
+            win.document.write(`<iframe src="${data}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
         }
 
-        window.onload = () => {
-            const container = document.getElementById('content');
-            document.getElementById('title').innerText = `報告清單 (${src.length} 份)`;
-            
+        function render() {
+            console.log("收到的資料:", src);
+            const container = document.getElementById('main-table');
+            document.getElementById('count-title').innerText = `報告清單 (${src.length})`;
+
             if (src.length === 0) {
-                container.innerHTML = '<tr><td colspan="6" style="text-align:center;">資料夾內沒有檔案或解析失敗</td></tr>';
+                container.innerHTML = '<tr><td colspan="6" style="text-align:center">目前沒有可顯示的報告資料</td></tr>';
                 return;
             }
 
-            container.innerHTML = src.map(d => `
+            container.innerHTML = src.map(item => `
                 <tr>
-                    <td>${d.日期}</td>
-                    <td><b>${d.代號}</b><br>${d.名稱}</td>
-                    <td>${d.券商}</td>
-                    <td>${d.建議}</td>
-                    <td style="color:blue; font-weight:bold">${d.目標價}</td>
+                    <td>${item.日期}</td>
+                    <td><b>${item.代號}</b><br>${item.名稱}</td>
+                    <td>${item.券商}</td>
+                    <td><span class="badge">${item.建議}</span></td>
+                    <td><span style="color:red">T: ${item.目標價}</span><br><span style="color:gray">L: ${item.昨收}</span></td>
                     <td>
-                        <button class="btn btn-v" onclick="preview('${d.pdfData}')">預覽</button>
-                        <a class="btn btn-d" href="${d.pdfData}" download="${d.filename}">下載</a>
+                        <button class="btn-view" onclick="openPDF('${item.pdfData}')">預覽報告</button>
                     </td>
                 </tr>
             `).join('');
-        };
+        }
+
+        window.onload = render;
     </script>
 </body>
 </html>
