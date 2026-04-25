@@ -1,39 +1,38 @@
 import streamlit as st
 import json
+import os
 import streamlit.components.v1 as components
 from parsers import extract_financial_data
-import os
 
-# 1. 讀取並解析資料夾內的 PDF
-def get_pdf_data():
+st.set_page_config(layout="wide")
+
+def load_and_inject_data():
     REPORT_DIR = "reports"
-    results = []
+    all_reports = []
+    
+    # 1. 掃描 PDF 並解析
     if os.path.exists(REPORT_DIR):
         files = [f for f in os.listdir(REPORT_DIR) if f.lower().endswith(".pdf")]
         for f in files:
-            # 呼叫你現有的解析器
             data = extract_financial_data(os.path.join(REPORT_DIR, f))
-            # 為了配合你的 HTML 下載功能，可以補一個路徑
+            # 補上 URL 供 HTML 下載使用
             data['url'] = f"reports/{f}"
-            results.append(data)
-    return results
-
-# 2. 啟動 Streamlit
-st.set_page_config(layout="wide")
-
-# 獲取資料並轉為 JSON 格式字串
-data_json = json.dumps(get_pdf_data(), ensure_ascii=False)
-
-# 3. 讀取 HTML 並注入資料
-try:
+            all_reports.append(data)
+            
+    # 2. 轉成 JSON
+    json_str = json.dumps(all_reports, ensure_ascii=False)
+    
+    # 3. 讀取並替換 HTML 內容
     with open("test.html", "r", encoding="utf-8") as f:
         html_template = f.read()
+    
+    # 精準替換
+    final_html = html_template.replace("[/* DATA_PLACEHOLDER */]", json_str)
+    return final_html
 
-    # 將資料直接塞進變數 originalData
-    final_html = html_template.replace("[/* DATA_PLACEHOLDER */]", data_json)
-
-    # 4. 渲染頁面 (高度設為 100vh 以配合你的設計)
-    components.html(final_html, height=900, scrolling=True)
-
+try:
+    final_content = load_and_inject_data()
+    # 渲染畫面，高度設為 1000 以確保圖表顯示完整
+    components.html(final_content, height=1000, scrolling=True)
 except Exception as e:
-    st.error(f"錯誤: {e}")
+    st.error(f"系統錯誤：{e}")
