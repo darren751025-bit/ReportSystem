@@ -1,30 +1,23 @@
 import pdfplumber
+import datetime
 
 def extract_financial_data(file_path):
-    """
-    最基礎的解析邏輯，僅提取文字，不處理任何預覽數據。
-    """
-    # 預設回傳格式
+    # 預設資料，加入當前日期作為預設值
     data = {
-        "日期": "-",
-        "代號": "-",
-        "名稱": "-",
-        "券商": "-",
-        "建議": "-",
+        "日期": datetime.date.today(), 
+        "代號": "N/A",
+        "名稱": "未命名報告",
+        "券商": "未知券商",
+        "建議": "中立",
         "目標價": "-"
     }
-    
     try:
         with pdfplumber.open(file_path) as pdf:
             first_page = pdf.pages[0]
             text = first_page.extract_text()
-            
             if text:
-                # 如果有讀到字，暫時統一標記為已讀取
-                # (你可以之後再慢慢加回正則表達式)
-                data["名稱"] = "已讀取PDF內容"
+                # 這裡僅模擬解析，實際開發可加入正規表達式
+                data["名稱"] = f"已解析: {file_path.split('/')[-1]}"
     except Exception as e:
-        # 發生錯誤時只印在後台，不讓前台崩潰
-        print(f"Error reading {file_path}: {e}")
-        
+        print(f"解析錯誤: {e}")
     return data
