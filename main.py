@@ -6,7 +6,6 @@ from datetime import datetime, date
 import streamlit.components.v1 as components
 from parsers import extract_financial_data
 
-# --- 1. 配置與路徑 ---
 st.set_page_config(page_title="券商研究報告檢索系統", layout="wide")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -15,96 +14,85 @@ CACHE_CSV = os.path.join(BASE_DIR, "data", "report_cache.csv")
 USER_DB = os.path.join(BASE_DIR, "data", "Member account.csv")
 HTML_FILE = os.path.join(BASE_DIR, "test.html")
 
-# 確保目錄存在
-for path in [PDF_FOLDER, os.path.dirname(CACHE_CSV)]:
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-# --- 2. 解析邏輯 ---
+# --- 1. 自動偵測與解析邏輯 ---
 def sync_data():
-    cols = ["date", "code", "name", "broker", "rec", "target", "last", "filename"]
-    df_cache = pd.DataFrame(columns=cols)
-    
-    if os.path.exists(CACHE_CSV):
-        try:
-            df_cache = pd.read_csv(CACHE_CSV)
-            if 'filename' not in df_cache.columns:
-                df_cache = pd.DataFrame(columns=cols)
-        except:
-            pass
-
+    # 強制檢查 reports 資料夾
     if not os.path.exists(PDF_FOLDER):
-        st.error(f"找不到夾路徑: {PDF_FOLDER}")
-        return df_cache
+        os.makedirs(PDF_FOLDER)
+        return pd.DataFrame()
 
     all_pdfs = [f for f in os.listdir(PDF_FOLDER) if f.lower().endswith('.pdf')]
     
-    if not all_pdfs:
-        st.warning(f"⚠️ 警告：在 {PDF_FOLDER} 資料夾中沒看到任何 PDF 檔案！")
-    
-    existing_files = df_cache['filename'].tolist() if not df_cache.empty else []
-    new_entries = []
-    
-    for pdf in all_pdfs:
-        if pdf not in existing_files:
-            try:
-                info = extract_financial_data(os.path.join(PDF_FOLDER, pdf))
-                entry = {
-                    "date": info.get("日期", datetime.now().strftime("%m.%d")),
-                    "code": info.get("代號", ""),
-                    "name": info.get("名稱", ""),
-                    "broker": info.get("券商", ""),
-                    "rec": info.get("建議", ""),
-                    "target": str(info.get("目標價", "")),
-                    "last": str(info.get("昨收", "")),
-                    "filename": pdf
-                }
-                new_entries.append(entry)
-            except Exception as e:
-                st.error(f"解析 {pdf} 失敗: {e}")
-    
-    if new_entries:
-        df_new = pd.DataFrame(new_entries)
-        df_cache = pd.concat([df_cache, df_new], ignore_index=True)
-        df_cache.to_csv(CACHE_CSV, index=False, encoding='utf-8-sig')
-    
-    return df_cache
+    # 定義標準化的欄位 (為了對接 HTML)
+    def normalize_info(info, filename):
+        return {
+            "date": str(info.get("日期") or info.get("date") or datetime.now().strftime("%m.%d")),
+            "code": str(info.get("代號") or info.get("code") or ""),
+            "name": str(info.get("名稱") or info.get("name") or ""),
+            "broker": str(info.get("券商") or info.get("broker") or ""),
+            "rec": str(info.get("建議") or info.get("rec") or "未分類"),
+            "target": str(info.get("目標價") or info.get("target") or ""),
+            "last": str(info.get("昨收") or info.get("last") or ""),
+            "filename": filename
+        }
 
-# --- 3. 登入邏輯 ---
+    # 如果沒有 PDF，直接回傳空資料
+    if not all_pdfs:
+        return pd.DataFrame()
+
+    results = []
+    for pdf in all_pdfs:
+        try:
+            path = os.path.join(PDF_FOLDER, pdf)
+            # 呼叫解析引擎
+            raw_info = extract_financial_data(path)
+            # 進行中英文 Key 轉換與標準化
+            clean_info = normalize_info(raw_info, pdf)
+            results.append(clean_info)
+        except Exception as e:
+            st.error(f"解析檔案 {pdf} 出錯: {e}")
+
+    df = pd.DataFrame(results)
+    # 存檔供備份
+    if not df.empty:
+        df.to_csv(CACHE_CSV, index=False, encoding='utf-8-sig')
+    return df
+
+# --- 2. 登入系統 ---
 if 'auth' not in st.session_state:
     st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.title("🛡️ 專業報告系統")
+    st.title("🛡️ 專業報告檢索系統")
     u = st.text_input("帳號")
     p = st.text_input("密碼", type="password")
     if st.button("登入", use_container_width=True):
         if os.path.exists(USER_DB):
             users = pd.read_csv(USER_DB)
-            match = users[(users['account'].astype(str)==u) & (users['password'].astype(str)==p)]
-            if not match.empty:
+            if any((users['account'].astype(str) == u) & (users['password'].astype(str) == p)):
                 st.session_state.auth = True
                 st.rerun()
             else: st.error("帳密錯誤")
-        else: st.error("找不到帳號資料檔")
+        else: st.error("系統檔案缺失 (Member account.csv)")
 else:
-    # 執行同步
-    df = sync_data()
+    # 登入成功
+    df_data = sync_data()
     
-    # 讀取 HTML
     if os.path.exists(HTML_FILE):
         with open(HTML_FILE, "r", encoding="utf-8") as f:
-            html_content = f.read()
+            tmpl = f.read()
         
-        # 轉換資料
-        json_data = df.to_json(orient='records', force_ascii=False)
+        # 準備注入的 JSON
+        if df_data.empty:
+            json_str = "[]"
+        else:
+            json_str = df_data.to_json(orient='records', force_ascii=False)
         
-        # 強制替換 (考慮到 test.html 裡可能有 let 或 const)
-        final_html = html_content.replace("let src = [];", f"const src = {json_data};")
-        final_html = final_html.replace("const src = [];", f"const src = {json_data};")
+        # 強力替換：無論你 HTML 寫 let 還是 const
+        final_html = tmpl.replace("let src = [];", f"const src = {json_data};") # 防呆
+        final_html = tmpl.replace("const src = [];", f"const src = {json_str};")
         
-        # 渲染
-        components.html(final_html, height=1200, scrolling=True)
+        components.html(final_html, height=1000, scrolling=True)
     else:
         st.error("找不到 test.html 檔案")
 
