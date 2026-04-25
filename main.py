@@ -2,56 +2,45 @@ import streamlit as st
 import os, json, base64
 import streamlit.components.v1 as components
 
-# 設定頁面
 st.set_page_config(layout="wide")
 
-# 路徑設定
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-REPORT_DIR = os.path.join(BASE_DIR, "reports")
-HTML_PATH = os.path.join(BASE_DIR, "test.html")
+# 獲取絕對路徑
+current_path = os.path.dirname(os.path.abspath(__file__))
+report_path = os.path.join(current_path, "reports")
+html_path = os.path.join(current_path, "test.html")
 
-def get_b64(path):
-    try:
-        with open(path, "rb") as f:
-            # 限制讀取大小，避免記憶體當機 (測試用)
-            return base64.b64encode(f.read()).decode()
-    except:
-        return ""
+st.title("🔍 系統路徑診斷")
 
-st.title("🚀 系統診斷控制台")
+# 診斷資訊 (這會出現在 Streamlit 網頁最上方)
+st.info(f"目前執行資料夾: {current_path}")
 
-# 第一步：檢查資料夾
-if not os.path.exists(REPORT_DIR):
-    st.error(f"找不到 reports 資料夾，請確認路徑：{REPORT_DIR}")
-    st.stop()
+if not os.path.exists(report_path):
+    st.error(f"❌ 找不到 reports 資料夾！請確認它在: {report_path}")
+    files = []
+else:
+    files = [f for f in os.listdir(report_path) if f.lower().endswith('.pdf')]
+    st.success(f"✅ 找到 {len(files)} 個 PDF 檔案")
 
-files = [f for f in os.listdir(REPORT_DIR) if f.lower().endswith(".pdf")]
-
-# 在 Streamlit 原生介面顯示檔案列表 (確認 Python 真的有抓到檔案)
-with st.sidebar:
-    st.subheader("📁 偵測到檔案")
-    st.write(files if files else "無 PDF 檔案")
-
-# 第二步：建立資料
-all_data = []
+# 讀取 PDF 並轉 Base64
+all_reports = []
 for f in files:
-    full_path = os.path.join(REPORT_DIR, f)
-    all_data.append({
+    full_p = os.path.join(report_path, f)
+    with open(full_p, "rb") as pdf_file:
+        b64 = base64.b64encode(pdf_file.read()).decode()
+    all_reports.append({
         "filename": f,
-        "代號": f.split('.')[0],
-        "pdfData": f"data:application/pdf;base64,{get_b64(full_path)}"
+        "pdf": f"data:application/pdf;base64,{b64}"
     })
 
-# 第三步：渲染 HTML
-if os.path.exists(HTML_PATH):
-    with open(HTML_PATH, "r", encoding="utf-8") as f:
-        template = f.read()
+# 注入 HTML
+if os.path.exists(html_path):
+    with open(html_path, "r", encoding="utf-8") as f:
+        html_code = f.read()
     
-    # 注入資料
-    json_payload = json.dumps(all_data, ensure_ascii=False)
-    # 這裡是關鍵：我們改用自定義標籤來替換
-    final_html = template.replace("/*DATA_PLACEHOLDER*/", f"const src = {json_payload};")
+    # 用最原始的替換方式
+    json_str = json.dumps(all_reports, ensure_ascii=False)
+    final_html = html_code.replace("const src = [];", f"const src = {json_str};")
     
-    components.html(final_html, height=1000, scrolling=True)
+    components.html(final_html, height=800, scrolling=True)
 else:
-    st.error("找不到 test.html")
+    st.error("❌ 找不到 test.html")
