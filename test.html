@@ -3,83 +3,91 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>券商研究報告檢索系統</title>
+    <title>研究報告檢索系統</title>
     <style>
         :root { --primary: #2563eb; --bg: #f8fafc; --text: #1e293b; --border: #e2e8f0; }
-        body { font-family: -apple-system, "Microsoft JhengHei", sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
-        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); padding-bottom: 15px; margin-bottom: 20px; }
-        h1 { font-size: 1.5rem; color: var(--primary); margin: 0; display: flex; align-items: center; gap: 10px; }
-        
+        body { font-family: "Microsoft JhengHei", sans-serif; background: var(--bg); margin: 0; padding: 20px; color: var(--text); }
+        .container { max-width: 1300px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .header { border-bottom: 2px solid var(--primary); padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th { background: #f1f5f9; padding: 12px; font-weight: 600; text-align: left; border-bottom: 2px solid var(--border); position: sticky; top: 0; }
-        td { padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 0.95rem; }
+        th { background: #f1f5f9; padding: 12px; text-align: left; border-bottom: 2px solid var(--border); position: sticky; top: 0; }
+        td { padding: 12px; border-bottom: 1px solid #f1f5f9; }
         tr:hover { background: #f8fafc; }
-        
-        .badge { padding: 4px 10px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
         .buy { background: #dcfce7; color: #166534; }
         .hold { background: #fef9c3; color: #854d0e; }
         .sell { background: #fee2e2; color: #991b1b; }
-        
-        .empty-state { text-align: center; padding: 60px; color: #94a3b8; }
-        .debug-info { margin-top: 20px; font-size: 0.8rem; color: #cbd5e1; border-top: 1px dashed #e2e8f0; padding-top: 10px; }
+        .empty { text-align: center; padding: 50px; color: #94a3b8; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>📈 券商研究報告系統</h1>
-            <div id="status-tag" style="font-size: 0.9rem; color: #64748b;">正在載入數據...</div>
-        </div>
-        
-        <div id="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>日期</th>
-                        <th>代號</th>
-                        <th>名稱</th>
-                        <th>券商</th>
-                        <th>投資建議</th>
-                        <th>目標價</th>
-                        <th>昨收</th>
-                    </tr>
-                </thead>
-                <tbody id="report-list">
-                    </tbody>
-            </table>
-        </div>
-        
-        <div id="no-data" class="empty-state" style="display: none;">
-            <div style="font-size: 3rem;">📂</div>
-            <p>目前沒有報告資料，請確認 reports 資料夾內是否有 PDF 檔案。</p>
+            <h2>📈 證券研究報告檢索系統</h2>
+            <div id="count-tag">正在讀取報告...</div>
         </div>
 
-        <div class="debug-info" id="debug-log">系統初始化完成</div>
+        <table id="main-table">
+            <thead>
+                <tr>
+                    <th>日期</th>
+                    <th>股票代號</th>
+                    <th>公司名稱</th>
+                    <th>研究券商</th>
+                    <th>投資建議</th>
+                    <th>目標價</th>
+                    <th>昨收</th>
+                </tr>
+            </thead>
+            <tbody id="table-body">
+                </tbody>
+        </table>
+        
+        <div id="no-data" class="empty" style="display:none;">
+            <h3>📂 暫無資料</h3>
+            <p>請確認 reports 資料夾中是否有 PDF 檔案，且解析程式運作正常。</p>
+        </div>
     </div>
 
     <script>
-        // 【關鍵】Python 會替換掉這一行
-        const src = []; 
+        // 【核心注入點】Python 會把 [] 替換成真實資料
+        const src = [];
 
-        function init() {
-            const listBody = document.getElementById('report-list');
+        function renderTable() {
+            const tbody = document.getElementById('table-body');
             const noData = document.getElementById('no-data');
-            const statusTag = document.getElementById('status-tag');
-            const debugLog = document.getElementById('debug-log');
+            const countTag = document.getElementById('count-tag');
 
-            // 檢查數據是否存在
             if (!src || src.length === 0) {
-                document.getElementById('table-container').style.display = 'none';
+                document.getElementById('main-table').style.display = 'none';
                 noData.style.display = 'block';
-                statusTag.innerText = "數據庫為空";
-                debugLog.innerText = "Debug: 接收到的 src 陣列長度為 0";
+                countTag.innerText = "共 0 筆報告";
                 return;
             }
 
-            statusTag.innerText = `共找到 ${src.length} 筆資料`;
-            debugLog.innerText = `Debug: 成功接收資料，最後更新檔案：${src[0].filename || '未知'}`;
+            countTag.innerText = `共 ${src.length} 筆報告`;
+            
+            tbody.innerHTML = src.map(item => {
+                let badgeClass = 'hold';
+                if (item.rec.includes('買')) badgeClass = 'buy';
+                if (item.rec.includes('賣')) badgeClass = 'sell';
 
-            // 渲染表格
-            listBody.innerHTML = src.map(item => {
-                // 自動對應欄位名稱（
+                return `
+                    <tr>
+                        <td style="color: #64748b;">${item.date}</td>
+                        <td><strong>${item.code}</strong></td>
+                        <td>${item.name}</td>
+                        <td>${item.broker}</td>
+                        <td><span class="badge ${badgeClass}">${item.rec}</span></td>
+                        <td style="color: #2563eb; font-weight:bold;">${item.target}</td>
+                        <td>${item.last}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // 頁面載入後執行
+        window.onload = renderTable;
+    </script>
+</body>
+</html>
