@@ -2,39 +2,33 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>研究報告檢索系統</title>
     <style>
-        :root { --primary: #2563eb; --bg: #f8fafc; --text: #1e293b; --border: #e2e8f0; }
-        body { font-family: "Microsoft JhengHei", sans-serif; background: var(--bg); margin: 0; padding: 20px; color: var(--text); }
-        .container { max-width: 1300px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .header { border-bottom: 2px solid var(--primary); padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;}
-        table { width: 100%; border-collapse: collapse; }
-        th { background: #f1f5f9; padding: 12px; text-align: left; border-bottom: 2px solid var(--border); }
-        td { padding: 12px; border-bottom: 1px solid #f1f5f9; }
-        tr:hover { background: #f8fafc; }
-        .badge { padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: bold; }
+        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; }
+        .card { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { background: #2563eb; color: white; padding: 12px; text-align: left; }
+        td { padding: 12px; border-bottom: 1px solid #eee; font-size: 14px; }
+        tr:hover { background: #f9fafb; }
+        .btn { padding: 6px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; font-size: 12px; border: none; transition: 0.3s; }
+        .btn-preview { background: #10b981; color: white; margin-right: 5px; }
+        .btn-preview:hover { background: #059669; }
+        .btn-download { background: #6b7280; color: white; }
+        .badge { padding: 3px 8px; border-radius: 12px; font-weight: bold; }
         .buy { background: #dcfce7; color: #166534; }
         .hold { background: #fef9c3; color: #854d0e; }
-        .sell { background: #fee2e2; color: #991b1b; }
-        .btn-view { padding: 5px 10px; background: #2563eb; color: white; border-radius: 4px; text-decoration: none; font-size: 12px; cursor: pointer; border: none; }
-        .btn-view:hover { background: #1d4ed8; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h2>📈 證券研究報告檢索系統</h2>
-            <div id="count-tag" style="background: #e2e8f0; padding: 5px 12px; border-radius: 20px; font-size: 14px;"></div>
-        </div>
-
+    <div class="card">
+        <h2>券商研究報告清單</h2>
+        <div id="status">正在加載報告...</div>
         <table>
             <thead>
                 <tr>
                     <th>日期</th>
-                    <th>股票代號</th>
-                    <th>公司名稱</th>
-                    <th>研究券商</th>
-                    <th>投資建議</th>
+                    <th>代碼名稱</th>
+                    <th>券商</th>
+                    <th>建議</th>
                     <th>目標價</th>
                     <th>昨收</th>
                     <th>操作</th>
@@ -45,28 +39,30 @@
     </div>
 
     <script>
-        const src = []; // Python 注入位置
+        const src = []; // 由 main.py 注入
+
+        function previewPDF(data) {
+            const win = window.open();
+            win.document.write(`<title>PDF 預覽</title><body style="margin:0"><embed src="${data}" type="application/pdf" width="100%" height="100%"/></body>`);
+        }
 
         function render() {
-            const tbody = document.getElementById('table-body');
-            document.getElementById('count-tag').innerText = `找到 ${src.length} 筆報告`;
-
-            tbody.innerHTML = src.map(item => {
-                let badgeClass = 'hold';
-                if (item.rec === '買進') badgeClass = 'buy';
-                if (item.rec === '賣出') badgeClass = 'sell';
-
+            const body = document.getElementById('table-body');
+            document.getElementById('status').innerText = `共找到 ${src.length} 筆報告`;
+            
+            body.innerHTML = src.map(item => {
+                const recClass = item.建議.includes('買進') ? 'buy' : 'hold';
                 return `
                     <tr>
-                        <td style="color: #64748b;">${item.date}</td>
-                        <td><strong>${item.code}</strong></td>
-                        <td>${item.name}</td>
-                        <td>${item.broker}</td>
-                        <td><span class="badge ${badgeClass}">${item.rec}</span></td>
-                        <td style="color: #2563eb; font-weight:bold;">${item.target}</td>
-                        <td>${item.last}</td>
+                        <td>${item.日期}</td>
+                        <td><strong>${item.代號}</strong><br><small>${item.名稱}</small></td>
+                        <td>${item.券商}</td>
+                        <td><span class="badge ${recClass}">${item.建議}</span></td>
+                        <td style="color:#2563eb; font-weight:bold">${item.目標價}</td>
+                        <td>${item.昨收}</td>
                         <td>
-                            <button class="btn-view" onclick="alert('請點擊左側邊欄下載 PDF 檔案：${item.filename}')">預覽/下載</button>
+                            <button class="btn btn-preview" onclick="previewPDF('${item.pdfData}')">直接預覽</button>
+                            <a class="btn btn-download" href="${item.pdfData}" download="${item.filename}">下載</a>
                         </td>
                     </tr>
                 `;
