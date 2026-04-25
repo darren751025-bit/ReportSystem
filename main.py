@@ -1,134 +1,116 @@
 import streamlit as st
 import pandas as pd
 import os
-from datetime import datetime, date
+import json
 import base64
+from datetime import datetime, date
+import streamlit.components.v1 as components
 from parsers import extract_financial_data
 
-# --- 1. 基礎配置與路徑設定 ---
-st.set_page_config(page_title="券商研究報告檢索系統", layout="wide")
-
+# --- 1. 配置與路徑 ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PDF_FOLDER = os.path.join(BASE_DIR, "reports")
 CACHE_CSV = os.path.join(BASE_DIR, "data", "report_cache.csv")
-# 指向你改名後的成員帳號檔案
 USER_DB = os.path.join(BASE_DIR, "data", "Member account.csv")
+HTML_TEMPLATE = os.path.join(BASE_DIR, "test.html")
 
-# 確保必要資料夾存在
-os.makedirs(PDF_FOLDER, exist_ok=True)
-os.makedirs(os.path.join(BASE_DIR, "data"), exist_ok=True)
+st.set_page_config(page_title="券商研究報告檢索系統", layout="wide")
 
-# --- 2. 核心功能：同步 PDF 數據 ---
-def sync_data():
+# --- 2. 核心邏輯：自動同步與解析 PDF ---
+def sync_reports():
     if os.path.exists(CACHE_CSV):
-        try:
-            df_cache = pd.read_csv(CACHE_CSV)
-        except:
-            df_cache = pd.DataFrame(columns=["文件名", "日期", "代號", "名稱", "券商", "建議", "目標價", "昨收"])
+        df = pd.read_csv(CACHE_CSV)
     else:
-        df_cache = pd.DataFrame(columns=["文件名", "日期", "代號", "名稱", "券商", "建議", "目標價", "昨收"])
+        df = pd.DataFrame(columns=["date", "code", "name", "broker", "rec", "target", "last", "filename"])
 
     all_pdfs = [f for f in os.listdir(PDF_FOLDER) if f.lower().endswith('.pdf')]
-    new_entries = []
-
+    new_data = []
+    
+    # 檢查是否有新檔案
+    existing_files = df['filename'].tolist() if not df.empty else []
     for pdf in all_pdfs:
-        if pdf not in df_cache['文件名'].values:
-            with st.spinner(f'解析新報告: {pdf}...'):
-                try:
-                    info = extract_financial_data(os.path.join(PDF_FOLDER, pdf))
-                    info["文件名"] = pdf
-                    if not info.get("日期"):
-                        info["日期"] = datetime.now().strftime("%m.%d")
-                    new_entries.append(info)
-                except Exception as e:
-                    st.error(f"解析 {pdf} 失敗: {e}")
+        if pdf not in existing_files:
+            info = extract_financial_data(os.path.join(PDF_FOLDER, pdf))
+            # 轉換為 HTML 版面需要的欄位格式
+            new_data.append({
+                "date": info.get("日期", datetime.now().strftime("%m.%d")),
+                "code": info.get("代號", ""),
+                "name": info.get("名稱", ""),
+                "broker": info.get("券商", ""),
+                "rec": info.get("建議", ""),
+                "target": info.get("目標價", ""),
+                "last": info.get("昨收", ""),
+                "filename": pdf
+            })
     
-    if new_entries:
-        df_new = pd.DataFrame(new_entries)
-        df_cache = pd.concat([df_cache, df_new], ignore_index=True)
-        df_cache.to_csv(CACHE_CSV, index=False, encoding='utf-8-sig')
-    
-    return df_cache
+    if new_data:
+        df = pd.concat([df, pd.DataFrame(new_data)], ignore_index=True)
+        df.to_csv(CACHE_CSV, index=False, encoding='utf-8-sig')
+    return df
 
-# --- 3. 登入驗證功能 (包含日期限制與過期提醒) ---
-def check_login(username, password):
-    if not os.path.exists(USER_DB):
-        st.error(f"找不到檔案：{USER_DB}")
-        return False
-    
+# --- 3. 登入檢查 ---
+def check_login(u, p):
+    if not os.path.exists(USER_DB): return False
     try:
-        users_df = pd.read_csv(USER_DB)
-        # 比對帳號與密碼
-        match = users_df[(users_df['account'].astype(str) == str(username)) & 
-                         (users_df['password'].astype(str) == str(password))]
-        
+        users = pd.read_csv(USER_DB)
+        match = users[(users['account'].astype(str) == str(u)) & (users['password'].astype(str) == str(p))]
         if not match.empty:
-            # 取得該帳號的到期日
-            expiry_str = str(match.iloc[0]['expiry_date']).strip()
-            # 將字串轉為日期物件
-            expiry_date_obj = datetime.strptime(expiry_str, "%Y-%m-%d").date()
-            
-            # 檢查是否過期
-            if date.today() <= expiry_date_obj:
-                return True # 沒過期，登入成功
-            else:
-                # 這裡就是你要求的「過期顯示」
-                st.error(f"❌ 您的帳號已於 {expiry_str} 到期，請聯繫管理員。")
-                return False
-        else:
-            st.error("❌ 帳號或密碼錯誤。")
-            return False
-    except Exception as e:
-        st.error(f"登入驗證出錯，請檢查 CSV 格式：{e}")
-        return False
+            expiry = datetime.strptime(str(match.iloc[0]['expiry_date']), "%Y-%m-%d").date()
+            if date.today() <= expiry: return True, ""
+            return False, f"❌ 帳號已於 {expiry} 過期，請聯繫管理員。"
+        return False, "❌ 帳號或密碼錯誤。"
+    except: return False, "系統錯誤"
 
-# --- 4. 介面控制流程 ---
-if 'logged_in' not in st.session_state:
-    st.session_state['logged_in'] = False
+# --- 4. 渲染 HTML 版面 ---
+def render_custom_html(df):
+    if not os.path.exists(HTML_TEMPLATE):
+        st.error("找不到 test.html 檔案")
+        return
 
-if not st.session_state['logged_in']:
-    # 登入畫面
-    st.title("🛡️ 報告檢索系統 - 會員登入")
+    # 將數據轉為 JSON 供 JavaScript 使用
+    report_json = df.to_json(orient='records', force_ascii=False)
+    
+    with open(HTML_TEMPLATE, "r", encoding="utf-8") as f:
+        html_code = f.read()
+
+    # 關鍵：將 HTML 內的靜態數據替換為動態 JSON
+    # 假設你的 test.html 裡有一行是 const src = [...];
+    # 我們將其替換為 Python 產生的資料
+    dynamic_html = html_code.replace(
+        "const src = [];", f"const src = {report_json};"
+    ).replace(
+        "let src = [];", f"let src = {report_json};"
+    )
+    
+    # 渲染組件 (高度根據內容調整)
+    components.html(dynamic_html, height=900, scrolling=True)
+
+# --- 5. 主程式流程 ---
+if 'auth' not in st.session_state:
+    st.session_state.auth = False
+
+if not st.session_state.auth:
+    st.title("🔐 系統登入")
     with st.container():
-        u = st.text_input("帳號 (Account)")
-        p = st.text_input("密碼 (Password)", type="password")
-        if st.button("確認登入", use_container_width=True):
-            if check_login(u, p):
-                st.session_state['logged_in'] = True
+        u = st.text_input("帳號")
+        p = st.text_input("密碼", type="password")
+        if st.button("登入", use_container_width=True):
+            success, msg = check_login(u, p)
+            if success:
+                st.session_state.auth = True
                 st.rerun()
+            else:
+                st.error(msg)
 else:
-    # 登入成功後的主介面
-    df = sync_data()
-
+    # 1. 先抓取最新資料
+    df_reports = sync_reports()
+    
+    # 2. 顯示你想要的 HTML 版面
+    render_custom_html(df_reports)
+    
+    # 3. 側邊欄輔助功能
     with st.sidebar:
-        st.header("🔍 篩選")
-        search_q = st.text_input("搜尋代號/名稱")
-        st.divider()
+        st.success("會員登入中")
         if st.button("登出"):
-            st.session_state['logged_in'] = False
+            st.session_state.auth = False
             st.rerun()
-
-    st.title("📈 券商研究報告檢索平台")
-    tabs = st.tabs(["全部報告", "個股研究", "產業報告"])
-
-    with tabs[0]:
-        display_df = df.copy()
-        if search_q:
-            mask = display_df.apply(lambda row: row.astype(str).str.contains(search_q).any(), axis=1)
-            display_df = display_df[mask]
-
-        st.dataframe(
-            display_df[["日期", "代號", "名稱", "券商", "建議", "目標價", "昨收"]],
-            use_container_width=True,
-            hide_index=True
-        )
-
-        st.divider()
-        if not display_df.empty:
-            selected_pdf = st.selectbox("預覽 PDF 報告", display_df['文件名'].tolist())
-            if selected_pdf:
-                pdf_path = os.path.join(PDF_FOLDER, selected_pdf)
-                with open(pdf_path, "rb") as f:
-                    base64_pdf = base64.b64encode(f.read()).decode('utf-8')
-                pdf_display = f'<embed src="data:application/pdf;base64,{base64_pdf}" width="100%" height="800" type="application/pdf">'
-                st.markdown(pdf_display, unsafe_allow_html=True)
