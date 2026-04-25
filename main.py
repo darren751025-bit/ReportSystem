@@ -3,63 +3,95 @@ import os
 import pandas as pd
 from parsers import extract_financial_data
 
-st.set_page_config(layout="wide", page_title="券商報告系統")
+# 頁面基本設定
+st.set_page_config(layout="wide", page_title="券商研究報告系統")
 
-# --- 側邊欄：登入資訊 ---
-st.sidebar.title("👤 會員中心")
-if st.sidebar.checkbox("管理員登入"):
-    st.sidebar.text_input("帳號")
-    st.sidebar.text_input("密碼", type="password")
-    st.sidebar.button("登入")
+# --- 側邊欄：登入功能 ---
+with st.sidebar:
+    st.title("👤 會員中心")
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
 
+    if not st.session_state.logged_in:
+        user = st.text_input("帳號")
+        pw = st.text_input("密碼", type="password")
+        if st.button("登入"):
+            # 這裡可以自定義帳密，目前預設點擊即登入
+            st.session_state.logged_in = True
+            st.rerun()
+    else:
+        st.success("已登入：管理員")
+        if st.button("登出"):
+            st.session_state.logged_in = False
+            st.rerun()
+
+# --- 主畫面邏輯 ---
 st.title("📂 證券研究報告檢索系統")
 
-# --- 讀取檔案 ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 REPORT_DIR = os.path.join(BASE_DIR, "reports")
 
+# 確保資料夾存在
 if not os.path.exists(REPORT_DIR):
-    st.error(f"路徑錯誤：請建立 `{REPORT_DIR}` 資料夾並放入 PDF")
+    os.makedirs(REPORT_DIR)
+    st.info(f"已自動建立資料夾：{REPORT_DIR}，請將 PDF 放入後重新整理。")
+
+files = [f for f in os.listdir(REPORT_DIR) if f.lower().endswith(".pdf")]
+
+if not files:
+    st.warning("目前 reports 資料夾內沒有任何 PDF 報告檔案。")
 else:
-    files = [f for f in os.listdir(REPORT_DIR) if f.lower().endswith(".pdf")]
-    
-    if not files:
-        st.info("目前資料夾中沒有 PDF 檔案")
-    else:
-        all_results = []
-        # 進度條，讓使用者知道系統正在跑
-        progress_bar = st.progress(0)
-        
-        for i, f in enumerate(files):
+    # 開始解析檔案
+    all_data = []
+    with st.spinner('正在讀取報告資料...'):
+        for f in files:
             f_path = os.path.join(REPORT_DIR, f)
-            # 解析
             res = extract_financial_data(f_path)
-            res["原始檔名"] = f
-            all_results.append(res)
-            progress_bar.progress((i + 1) / len(files))
-        
-        # 轉成表格
-        df = pd.DataFrame(all_results)
-        
-        # --- 搜尋功能 ---
-        search = st.text_input("🔍 搜尋公司名稱或代號", "")
-        if search:
-            df = df[df['名稱'].str.contains(search) | df['代號'].str.contains(search)]
-        
-        # --- 顯示表格 ---
-        st.subheader(f"📊 報告總覽 (共 {len(df)} 筆)")
-        # 使用原生表格，避免所有 ERR_BLOCKED_BY_CLIENT 錯誤
-        st.dataframe(df, use_container_width=True)
-        
-        # --- 下載區 ---
-        st.write("---")
-        st.subheader("📥 取得檔案")
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            to_download = st.selectbox("選擇要下載的檔案", files)
-        with col2:
-            with open(os.path.join(REPORT_DIR, to_download), "rb") as f:
-                st.download_button("💾 下載 PDF", data=f, file_name=to_download)
+            res["檔案名稱"] = f
+            all_data.append(res)
+    
+    df = pd.DataFrame(all_data)
+
+    # --- 搜尋過濾器 ---
+    search_col1, search_col2 = st.columns(2)
+    with search_col1:
+        q = st.text_input("🔍 搜尋名稱/代號", "")
+    with search_col2:
+        broker = st.multiselect("過濾券商", df["券商"].unique())
+
+    # 執行過濾
+    filtered_df = df.copy()
+    if q:
+        filtered_df = filtered_df[filtered_df['名稱'].str.contains(q, case=False) | filtered_df['代號'].str.contains(q)]
+    if broker:
+        filtered_df = filtered_df[filtered_df['券商'].isin(broker)]
+
+    # --- 資料展示 ---
+    st.subheader(f"📊 報告列表 (共 {len(filtered_df)} 筆)")
+    
+    # 使用 st.dataframe 讓使用者可以點擊表頭排序
+    st.dataframe(
+        filtered_df, 
+        use_container_width=True,
+        column_config={
+            "目標價": st.column_config.NumberColumn(format="NT$ %d"),
+            "檔案名稱": "原始檔名"
+        }
+    )
+
+    # --- 下載區塊 ---
+    st.write("---")
+    st.subheader("📥 檔案下載")
+    selected_f = st.selectbox("請選擇要下載的報告", filtered_df["檔案名稱"].tolist())
+    
+    if selected_f:
+        with open(os.path.join(REPORT_DIR, selected_f), "rb") as f:
+            st.download_button(
+                label=f"💾 下載 {selected_f}",
+                data=f,
+                file_name=selected_f,
+                mime="application/pdf"
+            )
 
 st.write("---")
-st.caption("系統狀態：運行中 | 無外部 HTML 依賴")
+st.caption("系統狀態：核心運行中 (無外部 HTML 依賴)")
