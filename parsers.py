@@ -1,33 +1,28 @@
 import pdfplumber
-import os
+from pathlib import Path
 from datetime import datetime
 
 def extract_financial_data(file_path):
-    # 獲取檔案最後修改日期
-    mtime = os.path.getmtime(file_path)
-    file_date = datetime.fromtimestamp(mtime).date()
+    p = Path(file_path)
+    # 取得檔案日期
+    file_date = datetime.fromtimestamp(p.stat().st_mtime).date()
     
-    # 預設回傳格式
     data = {
         "日期": file_date,
         "代號": "N/A",
-        "名稱": os.path.basename(file_path),
-        "券商": "偵測中",
-        "建議": "中立",
+        "名稱": p.name,
+        "券商": "未辨識",
+        "建議": "持平",
         "目標價": "-"
     }
     
     try:
         with pdfplumber.open(file_path) as pdf:
-            first_page = pdf.pages[0]
-            text = first_page.extract_text()
-            if text:
-                # 簡單內容識別邏輯
-                if "SinoPac" in text or "永豐" in text: data["券商"] = "永豐投顧"
-                elif "Morgan" in text or "MS" in text: data["券商"] = "大摩"
-                
-                # 這裡你可以後續加入正則表達式來精確抓取代號和目標價
-    except Exception as e:
-        print(f"解析 {file_path} 出錯: {e}")
-        
+            first_page_text = pdf.pages[0].extract_text()
+            if first_page_text:
+                # 基礎偵測邏輯
+                if "永豐" in first_page_text: data["券商"] = "永豐投顧"
+                if "凱基" in first_page_text: data["券商"] = "凱基證券"
+    except Exception:
+        pass
     return data
