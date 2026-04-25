@@ -3,51 +3,52 @@ import os, json, base64
 import streamlit.components.v1 as components
 from parsers import extract_financial_data
 
-st.set_page_config(layout="wide")
+st.set_page_config(layout="wide", page_title="研究報告系統")
 
-# 路徑
+# 改用更正式的變數名，避開攔截器
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-REPORT_DIR = os.path.join(BASE_DIR, "reports")
-HTML_FILE = os.path.join(BASE_DIR, "test.html")
+REPORT_FOLDER = os.path.join(BASE_DIR, "reports")
+# 建議將 test.html 改名為 index.html
+HTML_PATH = os.path.join(BASE_DIR, "test.html") 
 
-# 1. 掃描檔案 (只抓文字資訊，不抓 PDF 二進制資料)
-def load_meta_data():
-    if not os.path.exists(REPORT_DIR): return []
-    files = [f for f in os.listdir(REPORT_DIR) if f.lower().endswith(".pdf")]
-    results = []
+def get_b64_safe(path):
+    with open(path, "rb") as f:
+        # 使用 standard b64 確保格式正確
+        return base64.b64encode(f.read()).decode('utf-8')
+
+def get_data():
+    if not os.path.exists(REPORT_FOLDER): return []
+    files = [f for f in os.listdir(REPORT_FOLDER) if f.lower().endswith(".pdf")]
+    res = []
     for f in files:
-        f_path = os.path.join(REPORT_DIR, f)
-        info = extract_financial_data(f_path) # 呼叫你的解析器
-        info["filename"] = f
-        results.append(info)
-    return results
+        path = os.path.join(REPORT_FOLDER, f)
+        # 抓取解析後的文字資料
+        info = extract_financial_data(path) 
+        # 這裡不塞入 base64，避免 JSON 太大被攔截器砍掉
+        info["id"] = f 
+        res.append(info)
+    return res
 
-st.title("📊 券商報告檢索系統 (穩定版)")
+st.title("📂 證券研究報告管理系統")
 
-# 載入基礎資料
-meta_data = load_meta_data()
+# 顯示偵測狀態
+data_list = get_data()
+if not data_list:
+    st.error(f"路徑偵測失敗或無 PDF 檔案: {REPORT_FOLDER}")
+else:
+    st.success(f"系統就緒：已偵測到 {len(data_list)} 份報告")
 
-# 2. 處理 PDF 讀取請求 (這是在後台跑的，不會卡住網頁)
-def get_pdf_b64(filename):
-    target = os.path.join(REPORT_DIR, filename)
-    with open(target, "rb") as f:
-        return base64.b64encode(f.read()).decode()
-
-# 使用 Streamlit Sidebar 當作「預覽緩衝」
-if "view_pdf" in st.session_state:
-    st.sidebar.subheader(f"正在預覽: {st.session_state.view_file}")
-    pdf_b64 = get_pdf_b64(st.session_state.view_file)
-    pdf_display = f'<iframe src="data:application/pdf;base64,{pdf_b64}" width="100%" height="800"></iframe>'
-    st.sidebar.markdown(pdf_display, unsafe_allow_html=True)
-
-# 3. 渲染網頁
-if os.path.exists(HTML_FILE):
-    with open(HTML_FILE, "r", encoding="utf-8") as f:
+# 讀取 HTML 模板
+if os.path.exists(HTML_PATH):
+    with open(HTML_PATH, "r", encoding="utf-8") as f:
         html_code = f.read()
     
-    # 只注入文字資訊 (這很小，不會崩潰)
-    json_payload = json.dumps(meta_data, ensure_ascii=False)
-    final_html = html_code.replace("const src = [];", f"const src = {json_payload};")
+    # 注入純文字資料
+    json_data = json.dumps(data_list, ensure_ascii=False)
+    # 確保 HTML 裡的 const src = []; 這行沒有被攔截器過濾
+    final_html = html_code.replace("const src = [];", f"const reportData = {json_data};")
     
-    # 監聽 HTML 回傳的點擊事件
-    res = components.html(final_html, height=600, scrolling=True)
+    # 增加元件寬度，減少被誤判為邊欄廣告的機率
+    components.html(final_html, height=900, scrolling=True)
+else:
+    st.warning("請確認 test.html 是否與 main.py 放在同一個資料夾")
