@@ -3,47 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <style>
-        body { font-family: sans-serif; padding: 10px; background: #f9f9f9; }
-        table { width: 100%; border-collapse: collapse; background: white; }
-        th { background: #004b97; color: white; padding: 10px; }
-        td { padding: 10px; border-bottom: 1px solid #ddd; text-align: center; }
-        .btn { background: #28a745; color: white; border: none; padding: 5px 15px; border-radius: 4px; cursor: pointer; }
+        body { font-family: "Microsoft JhengHei", sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: auto; background: white; padding: 20px; border-radius: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th { background: #1a73e8; color: white; padding: 12px; }
+        td { padding: 12px; border-bottom: 1px solid #eee; text-align: center; }
+        .view-btn { background: #34a853; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <h3 id="info">正在讀取報告...</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>日期</th>
-                <th>代號/名稱</th>
-                <th>券商</th>
-                <th>建議/目標價</th>
-                <th>檔案</th>
-            </tr>
-        </thead>
-        <tbody id="list"></tbody>
-    </table>
+    <div class="container">
+        <h2>📑 研究報告列表</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>日期</th>
+                    <th>個股代號/名稱</th>
+                    <th>券商</th>
+                    <th>建議</th>
+                    <th>目標價</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="table-body"></tbody>
+        </table>
+    </div>
 
     <script>
-        const src = []; // Python 會填入基礎資料
+        // 注意：這裡的變數名要跟 Python 的 .replace 一致
+        const reportData = []; 
 
         window.onload = function() {
-            const list = document.getElementById('list');
-            document.getElementById('info').innerText = `找到 ${src.length} 份報告`;
+            const tbody = document.getElementById('table-body');
             
-            list.innerHTML = src.map(d => `
+            if (!reportData || reportData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6">暫無資料，請檢查報告資料夾或關閉廣告攔截器</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = reportData.map(item => `
                 <tr>
-                    <td>${d.日期}</td>
-                    <td><b>${d.代號}</b><br>${d.名稱}</td>
-                    <td>${d.券商}</td>
-                    <td>${d.建議}<br><span style="color:red">${d.目標價}</span></td>
-                    <td>
-                        <button class="btn" onclick="alert('請在左側 Streamlit 面板查看：' + '${d.filename}')">預覽</button>
-                    </td>
+                    <td>${item.日期 || '-'}</td>
+                    <td><b>${item.代號 || '-'}</b><br>${item.名稱 || '-'}</td>
+                    <td>${item.券商 || '-'}</td>
+                    <td>${item.建議 || '-'}</td>
+                    <td><span style="color:red; font-weight:bold;">${item.目標價 || '-'}</span></td>
+                    <td><button class="view-btn" onclick="alert('點擊成功！請確認瀏覽器未封鎖彈出視窗')">查看詳情</button></td>
                 </tr>
             `).join('');
-        }
+        };
     </script>
 </body>
 </html>
